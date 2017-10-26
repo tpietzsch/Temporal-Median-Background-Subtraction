@@ -8,6 +8,8 @@
   <groupId>nl.nki-avl</groupId>
   <artifactId>TemporalMedian</artifactId>
   <version>0.0.1</version>
+  <packaging>jar</packaging>
+  <name>Temporal_Median_filter</name>
   <dependencies>
   <dependency>
     <groupId>net.imagej</groupId>
