@@ -13,7 +13,7 @@
     </parent>
 
     <groupId>nl.nki-avl</groupId>
-    <artifactId>TemporalMedian</artifactId>
+    <artifactId>Temporal_Median</artifactId>
     <version>0.0.1-SNAPSHOT</version>
 
     <name>Temporal Median Filter</name>
