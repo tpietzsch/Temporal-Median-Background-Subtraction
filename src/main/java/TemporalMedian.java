@@ -1,15 +1,31 @@
-/*
- * To the extent possible under law, the ImageJ developers have waived
- * all copyright and related or neighboring rights to this tutorial code.
- *
- * See the CC0 1.0 Universal license for details:
- *     http://creativecommons.org/publicdomain/zero/1.0/
+/* Fast Temporal Median filter 
+Copyright (c) 2014, Marcelo Augusto Cordeiro, Milstein Lab, University of Toronto
+This ImageJ plugin was developed for the Milstein Lab at the University of Toronto,
+with the help of Professor Josh Milstein during the summer of 2014, as part of the
+Science Without Borders research opportunity program.
+
+In 2017 Bram van den Broek and Rolf Harkes, Dutch Cancer Institute of Amsterdam 
+implemented the algorithm in a maven .jar for easy deployment in Fiji (ImageJ2)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
  */
 
 import ij.ImagePlus;
 import ij.ImageStack;
-
-import java.util.stream.IntStream;
 
 import org.scijava.ItemVisibility;
 import org.scijava.app.StatusService;
@@ -71,7 +87,6 @@ public class TemporalMedian implements Command, Previewable {
     @Override
     public void preview() {
         log.info("previews median");
-        statusService.showStatus(header);
     }
 
     /**
@@ -88,8 +103,13 @@ public class TemporalMedian implements Command, Previewable {
 
         final ImageStack stack = image1.getStack();
         final ImageStack stack2 = image2.getStack();
-        log.info(String.valueOf(dims[4]));
-        for (int k = 1; k <= (dims[4] - window); k++) //Each passing creates one median frame
+        int mdim = 3 ;
+        int dimsize=0;
+        for (int i = 2;i == 4 ;i++) {
+            if (dims[i]>dimsize){mdim=i;dimsize=dims[i];}
+        }
+        log.info("taking dimension "+mdim+" with length "+String.valueOf(dims[mdim]));
+        for (int k = 1; k <= (dims[mdim] - window); k++) //Each passing creates one median frame
         {
 
             //median = median.clone(); //Cloning the median, or else the changes would overlap the previous median
@@ -197,11 +217,10 @@ public class TemporalMedian implements Command, Previewable {
                     }
                 }
             }
-
             //Subtracting the median
             pixels2 = (short[]) (stack2.getPixels(k));
             for (int j = 0; j < dimension; j++) {
-                pixels2[j] = median[j];
+                pixels2[j] -= median[j];
                 if (pixels2[j] < 0) {
                     pixels2[j] = 0;
                 }
