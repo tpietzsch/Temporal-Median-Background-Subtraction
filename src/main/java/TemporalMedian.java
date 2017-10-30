@@ -1,135 +1,216 @@
 /*
- * 
+ * To the extent possible under law, the ImageJ developers have waived
+ * all copyright and related or neighboring rights to this tutorial code.
+ *
+ * See the CC0 1.0 Universal license for details:
+ *     http://creativecommons.org/publicdomain/zero/1.0/
  */
 
 import ij.ImagePlus;
 import ij.ImageStack;
-import net.imagej.Dataset;
-import net.imagej.DatasetService;
-import net.imagej.axis.Axes;
-import net.imagej.axis.CalibratedAxis;
-import net.imagej.ops.Op;
-import net.imagej.ops.OpEnvironment;
-import org.scijava.AbstractContextual;
-import org.scijava.ItemIO;
-import org.scijava.convert.ConvertService;
-import org.scijava.plugin.Parameter;
-import org.scijava.plugin.Plugin;
 
 import java.util.stream.IntStream;
 
-/**
- * A plugin to calculate the Temporal Median of a dataset
- *
- * @author R.Harkes & B.van den Broek
- */
-@Plugin(type = Op.class, name = "datasetExample", menuPath = "NKI>Temporal Median")
-public class TemporalMedian extends AbstractContextual implements Op {
+import org.scijava.ItemVisibility;
+import org.scijava.app.StatusService;
+import org.scijava.command.Command;
+import org.scijava.command.Previewable;
+import org.scijava.log.LogService;
+import org.scijava.plugin.Parameter;
+import org.scijava.plugin.Plugin;
 
-    private ImagePlus image1 = null;
+/**
+ * Adds two datasets using the ImgLib2 framework.
+ */
+@Plugin(type = Command.class, headless = true,
+        menuPath = "NKI>Temporal Median")
+public class TemporalMedian implements Command, Previewable {
+
     private ImagePlus image2 = null;
 
     @Parameter
-    private ConvertService convertService = null;
+    private LogService log;
 
     @Parameter
-    private DatasetService datasetService = null;
+    private StatusService statusService;
 
-    @Parameter(type = ItemIO.BOTH)
-    private Dataset dataset = null;
+    @Parameter(visibility = ItemVisibility.MESSAGE)
+    private final String header = "This Presents two buttons";
 
-    public Dataset getDataset() {
-        return dataset;
-    }
+    @Parameter(label = "Select image", description = "the image field")
+    private ImagePlus image1;
 
-    public void setDataset(Dataset dataset) {
-        checkDataset(dataset);
-        this.dataset = dataset;
-        setImagePlus();
-    }
+    @Parameter(label = "Median window", description = "the frames for medan")
+    private short window;
 
-    @Override
-    public OpEnvironment ops() {
-        return null;
-    }
+    //@Parameter(label = "Ignore this", description = "Do not use this field", visibility = ItemVisibility.INVISIBLE)
+    //private ImagePlus IGNOREimage; //never used, need for getting a list selection for image1
+    public static void main(final String... args) throws Exception {
 
-    @Override
-    public void setEnvironment(OpEnvironment opEnvironment) {
     }
 
     @Override
     public void run() {
-        checkNotNull(convertService, "Missing services - did you remember to call setContext?");
-        checkNotNull(datasetService, "Missing services - did you remember to call setContext?");
-
-        if (image1 == null) {
-            // the plugin is (probably) run from an opService, check the dataset
-            // obtained as @Parameter
-            setDataset(dataset);
+        if (image1.getBitDepth() == 16) {
+            image1.deleteRoi(); //otherwise we create a partial duplicate
+            image2 = image1.duplicate();
+            image1.restoreRoi();
+            substrmean();
+            image2.show();
+        } else {
+            log.error("BitDepth must be 16 but was " + image1.getBitDepth());
         }
-        
-        image2 = image1.duplicate();
-        makeNegative(); //the main calculation. A void function that manipulates image.
-        image2.show();
+
     }
 
-    // Helper methods --
-    private void checkNotNull(final Object object, final String message) {
-        if (object == null) {
-            throw new NullPointerException(message);
-        }
+    @Override
+    public void cancel() {
+        log.info("Cancelled");
     }
 
-    private void checkArgument(final boolean argument, final String message) {
-        if (!argument) {
-            throw new IllegalArgumentException(message);
-        }
-    }
-
-    /**
-     * Check whether the Op can operate with the given dataset
-     *
-     * @throws NullPointerException if dataset == null
-     * @throws IllegalArgumentException if the dataset has wrong number of
-     * dimensions
-     * @throws IllegalArgumentException if the dataset cannot be converted into
-     * an ImagePlus
-     */
-    private void checkDataset(final Dataset dataset) {
-        checkNotNull(dataset, "Dataset cannot be null");
-        checkDatasetDimensions(dataset);
-        checkArgument(convertService.supports(dataset, ImagePlus.class), "Cannot convert given dataset");
-    }
-
-    private void checkDatasetDimensions(final Dataset dataset) {
-        checkArgument(dataset.numDimensions() == 3, "The plugin is meant only for 3D images");
-        CalibratedAxis axes[] = new CalibratedAxis[3];
-        dataset.axes(axes);
-        checkArgument(axes[0].type().isSpatial(), "Unexpected 1st dimension");
-        checkArgument(axes[1].type().isSpatial(), "Unexpected 2nd dimension");
-        checkArgument(axes[2].type().equals(Axes.TIME), "Unexpected 3rd dimension");
+    @Override
+    public void preview() {
+        log.info("previews median");
+        statusService.showStatus(header);
     }
 
     /**
      * Main calculation loop. Manipulates the data in image.
      */
-    private void makeNegative() {
-        final int depth = image1.getNFrames();
-        final ImageStack stack1 = image1.getStack();
+    private void substrmean() {
+        final int dims[] = image1.getDimensions(); //0=width, 1=height, 2=nChannels, 3=nSlices, 4=nFrames
+        final int dimension = dims[0] * dims[1];
+        short[] pixels = new short[dimension]; //pixel data from image1
+        short[] pixels2 = new short[dimension]; //pixel data from image1
+        short hist[][] = new short[dimension][65536]; //Gray-level histogram init at 0
+        short[] median = new short[dimension]; //Array to save the median pixels
+        short[] aux = new short[dimension];    //Marks the position of each median pixel in the column of the histogram, starting with 1
+
+        final ImageStack stack = image1.getStack();
         final ImageStack stack2 = image2.getStack();
+        log.info(String.valueOf(dims[4]));
+        for (int k = 1; k <= (dims[4] - window); k++) //Each passing creates one median frame
+        {
 
-        IntStream.rangeClosed(1, depth).parallel().forEach(t -> {
-            short pixels1[] = (short[]) stack1.getPixels(t);
-            short pixels2[]; //not read from, can just declare
-            pixels2 = (short[]) stack2.getPixels(t);
-            for (int i = 0; i < pixels1.length; i++) {
-                pixels2[i] = (short) Math.sqrt((double) pixels1[i]);
+            //median = median.clone(); //Cloning the median, or else the changes would overlap the previous median
+            if (k == 1) //Building the first histogram
+            {
+                for (int i = 1; i <= window; i++) //For each frame inside the window
+                {
+                    pixels = (short[]) (stack.getPixels(i + k - 1)); //Save all the pixels of the frame "i+k-1" in "pixels" (starting with 1)
+                    for (int j = 0; j < dimension; j++) //For each pixel in this frame
+                    {
+                        hist[j][pixels[j]]++; //Add it to the histogram
+                    }
+                }
+                for (int i = 0; i < dimension; i++) //Calculating the median
+                {
+                    short count = 0, j = -1;
+                    while (count < (window / 2)) //Counting the histogram, until it reaches the median
+                    {
+                        j++;
+                        count += hist[i][j];
+                    }
+                    aux[i] = (short) (count - (int) (Math.ceil(window / 2)) + 1);
+                    median[i] = j;
+                }
+            } else {
+                pixels = (short[]) (stack.getPixels(k - 1)); //Old pixels, remove them from the histogram
+                pixels2 = (short[]) (stack.getPixels(k + window - 1)); //New pixels, add them to the histogram
+                for (int i = 0; i < dimension; i++) //Calculating the new median
+                {
+                    hist[i][pixels[i]]--; //Removing old pixel
+                    hist[i][pixels2[i]]++; //Adding new pixel
+                    if (!(((pixels[i] > median[i])
+                            && (pixels2[i] > median[i]))
+                            || ((pixels[i] < median[i])
+                            && (pixels2[i] < median[i]))
+                            || ((pixels[i] == median[i])
+                            && (pixels2[i] == median[i])))) //Add and remove the same pixel, or pixels from the same side, the median doesn't change
+                    {
+                        int j = median[i];
+                        if ((pixels2[i] > median[i]) && (pixels[i] < median[i])) //The median goes right
+                        {
+                            if (hist[i][median[i]] == aux[i]) //The previous median was the last pixel of its column in the histogram, so it changes
+                            {
+                                j++;
+                                while (hist[i][j] == 0) //Searching for the next pixel
+                                {
+                                    j++;
+                                }
+                                median[i] = (short) (j);
+                                aux[i] = 1; //The median is the first pixel of its column
+                            } else {
+                                aux[i]++; //The previous median wasn't the last pixel of its column, so it doesn't change, just need to mark its new position
+                            }
+                        } else if ((pixels[i] > median[i]) && (pixels2[i] < median[i])) //The median goes left
+                        {
+                            if (aux[i] == 1) //The previous median was the first pixel of its column in the histogram, so it changes
+                            {
+                                j--;
+                                while (hist[i][j] == 0) //Searching for the next pixel
+                                {
+                                    j--;
+                                }
+                                median[i] = (short) (j);
+                                aux[i] = hist[i][j]; //The median is the last pixel of its column
+                            } else {
+                                aux[i]--; //The previous median wasn't the first pixel of its column, so it doesn't change, just need to mark its new position
+                            }
+                        } else if (pixels2[i] == median[i]) //new pixel = last median
+                        {
+                            if (pixels[i] < median[i]) //old pixel < last median, the median goes right
+                            {
+                                aux[i]++; //There is at least one pixel above the last median (the one that was just added), so the median doesn't change, just need to mark its new position
+                            }								//else, absolutely nothing changes
+                        } else //pixels[i]==median[i], old pixel = last median
+                        {
+                            if (pixels2[i] > median[i]) //new pixel > last median, the median goes right
+                            {
+                                if (aux[i] == (hist[i][median[i]] + 1)) //The previous median was the last pixel of its column, so it changes
+                                {
+                                    j++;
+                                    while (hist[i][j] == 0) //Searching for the next pixel
+                                    {
+                                        j++;
+                                    }
+                                    median[i] = (short) (j);
+                                    aux[i] = 1; //The median is the first pixel of its column
+                                }
+                                //else, absolutely nothing changes
+                            } else //pixels2[i]<median[i], new pixel < last median, the median goes left
+                            {
+                                if (aux[i] == 1) //The previous median was the first pixel of its column in the histogram, so it changes
+                                {
+                                    j--;
+                                    while (hist[i][j] == 0) //Searching for the next pixel
+                                    {
+                                        j--;
+                                    }
+                                    median[i] = (short) (j);
+                                    aux[i] = hist[i][j]; //The median is the last pixel of its column
+                                } else {
+                                    aux[i]--; //The previous median wasn't the first pixel of its column, so it doesn't change, just need to mark its new position
+                                }
+                            }
+                        }
+                    }
+                }
             }
-        });
-    }
 
-    private void setImagePlus() {
-        image1 = convertService.convert(dataset, ImagePlus.class);
+            //Subtracting the median
+            pixels2 = (short[]) (stack2.getPixels(k));
+            for (int j = 0; j < dimension; j++) {
+                pixels2[j] = median[j];
+                if (pixels2[j] < 0) {
+                    pixels2[j] = 0;
+                }
+            }
+
+            if ((k % 1000) == 0) {
+                System.gc(); //Calls the Garbage Collector every 1000 frames
+            }
+        }
+
     }
-    // endregion
 }
