@@ -14,7 +14,7 @@
 
     <groupId>nl.nki-avl</groupId>
     <artifactId>TemporalMedian</artifactId>
-    <version>1.0.0</version>
+    <version>1.1.0-SNAPSHOT</version>
 
     <name>Temporal Median Filter</name>
     <description>This plugin provides a temporal median filter using the ImgLib OPS framework to do parallel calculation. It was developed for pre-processing of large SMLM datasets.</description>
