@@ -67,14 +67,15 @@ public class TemporalMedian implements Command, Previewable {
 
     @Override
     public void run() {
-        if (image1.getBitDepth() == 16) {
+        double bitdepth = (double) image1.getBitDepth();
+        if (bitdepth == 16 || bitdepth == 8) {
             image1.deleteRoi(); //otherwise we create a partial duplicate
             image2 = image1.duplicate();
             image1.restoreRoi();
-            substrmean();
+            substrmedian(bitdepth);
             image2.show();
         } else {
-            log.error("BitDepth must be 16 but was " + image1.getBitDepth());
+            log.error("BitDepth must be 8 or 16 but was " + image1.getBitDepth());
         }
 
     }
@@ -92,12 +93,13 @@ public class TemporalMedian implements Command, Previewable {
     /**
      * Main calculation loop. Manipulates the data in image.
      */
-    private void substrmean() {
+    private void substrmedian(double bitdepth) {
         final int dims[] = image1.getDimensions(); //0=width, 1=height, 2=nChannels, 3=nSlices, 4=nFrames
         final int dimension = dims[0] * dims[1];
         short[] pixels = new short[dimension]; //pixel data from image1
         short[] pixels2 = new short[dimension]; //pixel data from image1
-        short hist[][] = new short[dimension][65536]; //Gray-level histogram init at 0
+        
+        short hist[][] = new short[dimension][(int) Math.pow(2, bitdepth)]; //Gray-level histogram init at 0
         short[] median = new short[dimension]; //Array to save the median pixels
         short[] aux = new short[dimension];    //Marks the position of each median pixel in the column of the histogram, starting with 1
 
@@ -111,7 +113,6 @@ public class TemporalMedian implements Command, Previewable {
         log.info("taking dimension "+mdim+" with length "+String.valueOf(dims[mdim]));
         for (int k = 1; k <= (dims[mdim] - window); k++) //Each passing creates one median frame
         {
-
             //median = median.clone(); //Cloning the median, or else the changes would overlap the previous median
             if (k == 1) //Building the first histogram
             {
