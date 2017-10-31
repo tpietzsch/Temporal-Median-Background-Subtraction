@@ -6,9 +6,12 @@ Science Without Borders research opportunity program.
 
 In 2017 Bram van den Broek and Rolf Harkes, Dutch Cancer Institute of Amsterdam 
 implemented the algorithm in a maven .jar for easy deployment in Fiji (ImageJ2)
-For 16-bit values the number of unique values should not exceed 2^15-1 (32767)
-This almost never occurs, since most camera's are secretly just 14-bit. Otherwise
-the user must divide by 2 before running this plugin.
+The window is changed from forward to central.
+The empty bins in the histogram are removed beforehand to reduce memory usage.
+The possibility to add an offset to the data before median removal to prevent rounding errors.
+
+Used articles:
+T.S.Huang et al. 1979 - Original algorithm for median calculation
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -61,7 +64,7 @@ public class TemporalMedian implements Command, Previewable {
 
     @Parameter(label = "Median window", description = "the frames for medan")
     private short window;
-    
+
     @Parameter(label = "Added offset", description = "offset added to the new image")
     private short offset;
 
@@ -104,18 +107,21 @@ public class TemporalMedian implements Command, Previewable {
         log.info("finding largest dimension");
         final int dims[] = image1.getDimensions(); //0=width, 1=height, 2=nChannels, 3=nSlices, 4=nFrames
         final int dimension = dims[0] * dims[1]; // pixels per image
-        int mdim = 100 ;
-        int dimsize=0;
-        for (int i = 2;i <= 4 ;i++) {
-            if (dims[i]>dimsize){mdim=i;dimsize=dims[i];}
+        int mdim = 100;
+        int dimsize = 0;
+        for (int i = 2; i <= 4; i++) {
+            if (dims[i] > dimsize) {
+                mdim = i;
+                dimsize = dims[i];
+            }
         }
-        log.info("taking dimension "+mdim+" with length "+String.valueOf(dims[mdim]));
+        log.info("taking dimension " + mdim + " with length " + String.valueOf(dims[mdim]));
         log.info("loading datastacks");
         final ImageStack stack = image1.getStack();
         final ImageStack stack2 = image2.getStack();
-        
+
         log.info("determine needed bitdepth with an initial histogram");
-        short inihist[]= new short[values]; 
+        int inihist[] = new int[values];
         short[] pixels = new short[dimension]; //pixel data from image1
         for (int k = 1; k <= dims[mdim]; k++) {
             pixels = (short[]) (stack.getPixels(k));
@@ -130,17 +136,18 @@ public class TemporalMedian implements Command, Previewable {
         int addindex[] = new int[(int) values];
         int idx = 0;
         int subtractvalue = 0;
-        for (int i=0; i<values;i++) {
-            if (inihist[i]==0){
+        for (int i = 0; i < values; i++) {
+            if (inihist[i] == 0) {
                 subtractvalue++;
-            }else{
+            } else {
                 subtract[i] = subtractvalue;
-                addindex[idx] = subtractvalue;idx++;
+                addindex[idx] = subtractvalue;
+                idx++;
             }
         }
         values -= subtractvalue;
-        
-        log.info("found "+values+" unique values in the image");
+
+        log.info("found " + values + " unique values in the image");
         log.info("reserve memory for median calculations");
         short[] pixels2 = new short[dimension]; //pixel data from image1 to be added
         short[] pixelsnew = new short[dimension]; //pixel data from image2 to be udpated
@@ -148,9 +155,9 @@ public class TemporalMedian implements Command, Previewable {
         short[] median = new short[dimension]; //Array to save the median pixels
         short[] aux = new short[dimension];    //Marks the position of each median pixel in the column of the histogram, starting with 1
         log.info("start the big loop");
+        int cntzero = 0; //count pixels that fall below zero
         for (int k = 1; k <= (dims[mdim] - window); k++) //Each passing creates one median frame
         {
-            //median = median.clone(); //Cloning the median, or else the changes would overlap the previous median
             if (k == 1) //Building the first histogram
             {
                 log.info("calculating first histogram");
@@ -159,7 +166,7 @@ public class TemporalMedian implements Command, Previewable {
                     pixels = (short[]) (stack.getPixels(i + k - 1)); //Save all the pixels of the frame "i+k-1" in "pixels" (starting with 1)
                     for (int j = 0; j < dimension; j++) //For each pixel in this frame
                     {
-                        pixels[j] =(short) (pixels[j] - subtract[pixels[j]]); //remove empty values to shorten the histogram
+                        pixels[j] = (short) (pixels[j] - subtract[pixels[j]]); //remove empty values to shorten the histogram
                         hist[j][pixels[j]]++; //Add it to the histogram
                     }
                 }
@@ -174,14 +181,14 @@ public class TemporalMedian implements Command, Previewable {
                     aux[i] = (short) (count - (int) (Math.ceil(window / 2)) + 1);
                     median[i] = j;
                 }
-                log.info("done calculating first histogram");
+                log.info("done calculating median for first histogram");
             } else {
                 pixels = (short[]) (stack.getPixels(k - 1)); //Old pixels, remove them from the histogram
                 pixels2 = (short[]) (stack.getPixels(k + window - 1)); //New pixels, add them to the histogram
                 for (int i = 0; i < dimension; i++) //Calculating the new median
                 {
                     //pixels[i] =(short) (pixels[i] - subtract[pixels[i]]); //already subtracted before
-                    pixels2[i] =(short) (pixels2[i] - subtract[pixels2[i]]); //remove empty values to shorten the histogram
+                    pixels2[i] = (short) (pixels2[i] - subtract[pixels2[i]]); //remove empty values to shorten the histogram
                     hist[i][pixels[i]]--; //Removing old pixel
                     hist[i][pixels2[i]]++; //Adding new pixel
                     if (!(((pixels[i] > median[i])
@@ -260,18 +267,46 @@ public class TemporalMedian implements Command, Previewable {
                     }
                 }
             }
-            pixelsnew = (short[]) (stack2.getPixels(k));
-            for (int j = 0; j < dimension; j++) {
-                pixelsnew[j] =  (short)(pixelsnew[j]+offset-median[j]-addindex[median[j]]); //
-                if (pixelsnew[j] < 0) {
-                    pixelsnew[j] = 0;
+            if (k == 1) { //first median calculation. apply to k=1..window/2
+                log.info("apply first median");
+                for (int fr = 1; fr <= k + window / 2; fr++) {
+                    pixelsnew = (short[]) (stack2.getPixels(fr));
+                    for (int j = 0; j < dimension; j++) {
+                        pixelsnew[j] = (short) (pixelsnew[j] + offset - median[j] - addindex[median[j]]); //
+                        if (pixelsnew[j] < 0) {
+                            pixelsnew[j] = 0;
+                            cntzero++;
+                        }
+                    }
+                }
+            } else { //apply to frame in centre of the medianwindow
+                pixelsnew = (short[]) (stack2.getPixels(k + window / 2));
+                for (int j = 0; j < dimension; j++) {
+                    pixelsnew[j] = (short) (pixelsnew[j] + offset - median[j] - addindex[median[j]]); //
+                    if (pixelsnew[j] < 0) {
+                        pixelsnew[j] = 0;
+                        cntzero++;
+                    }
                 }
             }
-
             if ((k % 1000) == 0) {
                 System.gc(); //Calls the Garbage Collector every 1000 frames
             }
         }
-
+        log.info("apply last median");
+        for (int k = 1 + dims[mdim] - window/2; k <= dims[mdim]; k++) { //apply last medan to remaining frames
+            pixelsnew = (short[]) (stack2.getPixels(k));
+            for (int j = 0; j < dimension; j++) {
+                pixelsnew[j] = (short) (pixelsnew[j] + offset - median[j] - addindex[median[j]]); //
+                if (pixelsnew[j] < 0) {
+                    pixelsnew[j] = 0;
+                    cntzero++;
+                }
+            }
+        }
+        log.info("finished!");
+        if (cntzero > 0) {
+            log.warn(cntzero + " pixels fell below 0");
+        }
     }
 }
