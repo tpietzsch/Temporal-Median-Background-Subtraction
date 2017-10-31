@@ -1,5 +1,6 @@
 # Temporal Median filter 
 An adaption of https://github.com/marcelocordeiro/MedianFilter-ImageJ
+
 Copyright (c) 2014, Marcelo Augusto Cordeiro, Milstein Lab, University of Toronto.
 This ImageJ plugin was developed for the Milstein Lab at the University of Toronto,
 with the help of Professor Josh Milstein during the summer of 2014, as part of the
