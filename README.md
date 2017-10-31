@@ -8,9 +8,13 @@ Science Without Borders research opportunity program.
 
 Copyright (c) 2017 Bram van den Broek and Rolf Harkes, Dutch Cancer Institute of Amsterdam.
 Implementation of the algorithm in a maven .jar for easy deployment in Fiji (ImageJ2)
-The window is changed from forward to central.
-The empty bins in the histogram are removed beforehand to reduce memory usage.
-The possibility to add an offset to the data before median removal to prevent rounding errors.
+
+Changes:
+* The window is changed from forward to central.
+* The empty bins in the histogram are removed beforehand to reduce memory usage.
+* The possibility to add an offset to the data before median removal to prevent rounding errors.
+* Normalization of data was removed
+* Custom start and finish of filter was removed
 
 Used articles:
 T.S.Huang et al. 1979 - Original algorithm for median calculation
