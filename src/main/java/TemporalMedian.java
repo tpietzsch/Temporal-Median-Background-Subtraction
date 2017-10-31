@@ -54,13 +54,16 @@ public class TemporalMedian implements Command, Previewable {
     private StatusService statusService;
 
     @Parameter(visibility = ItemVisibility.MESSAGE)
-    private final String header = "This Presents two buttons";
+    private final String header = "Temporal Medianfilter Options";
 
     @Parameter(label = "Select image", description = "the image field")
     private ImagePlus image1;
 
     @Parameter(label = "Median window", description = "the frames for medan")
     private short window;
+    
+    @Parameter(label = "Added offset", description = "offset added to the new image")
+    private short offset;
 
     //@Parameter(label = "Ignore this", description = "Do not use this field", visibility = ItemVisibility.INVISIBLE)
     //private ImagePlus IGNOREimage; //never used, need for getting a list selection for image1
@@ -101,9 +104,9 @@ public class TemporalMedian implements Command, Previewable {
         log.info("finding largest dimension");
         final int dims[] = image1.getDimensions(); //0=width, 1=height, 2=nChannels, 3=nSlices, 4=nFrames
         final int dimension = dims[0] * dims[1]; // pixels per image
-        int mdim = 3 ;
+        int mdim = 100 ;
         int dimsize=0;
-        for (int i = 2;i == 4 ;i++) {
+        for (int i = 2;i <= 4 ;i++) {
             if (dims[i]>dimsize){mdim=i;dimsize=dims[i];}
         }
         log.info("taking dimension "+mdim+" with length "+String.valueOf(dims[mdim]));
@@ -124,19 +127,23 @@ public class TemporalMedian implements Command, Previewable {
         log.info("finished initialhistogram");
         log.info("finding subtraction values");
         int subtract[] = new int[(int) values];
+        int addindex[] = new int[(int) values];
+        int idx = 0;
         int subtractvalue = 0;
         for (int i=0; i<values;i++) {
             if (inihist[i]==0){
                 subtractvalue++;
             }else{
                 subtract[i] = subtractvalue;
+                addindex[idx] = subtractvalue;idx++;
             }
         }
         values -= subtractvalue;
         
         log.info("found "+values+" unique values in the image");
         log.info("reserve memory for median calculations");
-        short[] pixels2 = new short[dimension]; //pixel data from image1
+        short[] pixels2 = new short[dimension]; //pixel data from image1 to be added
+        short[] pixelsnew = new short[dimension]; //pixel data from image2 to be udpated
         short hist[][] = new short[dimension][values]; //Gray-level histogram init at 0
         short[] median = new short[dimension]; //Array to save the median pixels
         short[] aux = new short[dimension];    //Marks the position of each median pixel in the column of the histogram, starting with 1
@@ -152,7 +159,7 @@ public class TemporalMedian implements Command, Previewable {
                     pixels = (short[]) (stack.getPixels(i + k - 1)); //Save all the pixels of the frame "i+k-1" in "pixels" (starting with 1)
                     for (int j = 0; j < dimension; j++) //For each pixel in this frame
                     {
-                        pixels[j] -= subtract[pixels[j]]; //remove empty values to shorten the histogram
+                        pixels[j] =(short) (pixels[j] - subtract[pixels[j]]); //remove empty values to shorten the histogram
                         hist[j][pixels[j]]++; //Add it to the histogram
                     }
                 }
@@ -173,8 +180,8 @@ public class TemporalMedian implements Command, Previewable {
                 pixels2 = (short[]) (stack.getPixels(k + window - 1)); //New pixels, add them to the histogram
                 for (int i = 0; i < dimension; i++) //Calculating the new median
                 {
-                    pixels[i] -= subtract[pixels[i]]; //remove empty values to shorten the histogram
-                    pixels2[i] -= subtract[pixels2[i]]; //remove empty values to shorten the histogram
+                    //pixels[i] =(short) (pixels[i] - subtract[pixels[i]]); //already subtracted before
+                    pixels2[i] =(short) (pixels2[i] - subtract[pixels2[i]]); //remove empty values to shorten the histogram
                     hist[i][pixels[i]]--; //Removing old pixel
                     hist[i][pixels2[i]]++; //Adding new pixel
                     if (!(((pixels[i] > median[i])
@@ -253,11 +260,11 @@ public class TemporalMedian implements Command, Previewable {
                     }
                 }
             }
-            pixels2 = (short[]) (stack2.getPixels(k));
+            pixelsnew = (short[]) (stack2.getPixels(k));
             for (int j = 0; j < dimension; j++) {
-                pixels2[j] -= (median[j]+subtract[median[j]]); //add empty values to get proper median
-                if (pixels2[j] < 0) {
-                    pixels2[j] = 0;
+                pixelsnew[j] =  (short)(pixelsnew[j]+offset-median[j]-addindex[median[j]]); //
+                if (pixelsnew[j] < 0) {
+                    pixelsnew[j] = 0;
                 }
             }
 
