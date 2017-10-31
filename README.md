@@ -1,2 +1,14 @@
-# TemporalMedian
-A temporal median filter for large image stacks. 
+# Temporal Median filter 
+Copyright (c) 2014, Marcelo Augusto Cordeiro, Milstein Lab, University of Toronto.
+This ImageJ plugin was developed for the Milstein Lab at the University of Toronto,
+with the help of Professor Josh Milstein during the summer of 2014, as part of the
+Science Without Borders research opportunity program.
+
+Copyright (c) 2017 Bram van den Broek and Rolf Harkes, Dutch Cancer Institute of Amsterdam.
+Implementation of the algorithm in a maven .jar for easy deployment in Fiji (ImageJ2)
+The window is changed from forward to central.
+The empty bins in the histogram are removed beforehand to reduce memory usage.
+The possibility to add an offset to the data before median removal to prevent rounding errors.
+
+Used articles:
+T.S.Huang et al. 1979 - Original algorithm for median calculation
