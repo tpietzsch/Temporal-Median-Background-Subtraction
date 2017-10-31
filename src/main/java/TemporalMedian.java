@@ -103,6 +103,7 @@ public class TemporalMedian implements Command, Previewable {
      * Main calculation loop. Manipulates the data in image.
      */
     private void substrmedian(double bitdepth) {
+        
         int values = (int) Math.pow(2, bitdepth);
         log.info("finding largest dimension");
         final int dims[] = image1.getDimensions(); //0=width, 1=height, 2=nChannels, 3=nSlices, 4=nFrames
@@ -158,6 +159,7 @@ public class TemporalMedian implements Command, Previewable {
         int cntzero = 0; //count pixels that fall below zero
         for (int k = 1; k <= (dims[mdim] - window); k++) //Each passing creates one median frame
         {
+            statusService.showProgress(k, dims[mdim]);
             if (k == 1) //Building the first histogram
             {
                 log.info("calculating first histogram");
@@ -305,6 +307,7 @@ public class TemporalMedian implements Command, Previewable {
             }
         }
         log.info("finished!");
+        statusService.clearStatus();
         if (cntzero > 0) {
             log.warn(cntzero + " pixels fell below 0");
         }
