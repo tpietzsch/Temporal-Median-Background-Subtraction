@@ -76,7 +76,7 @@ public class TemporalMedian implements Command, Previewable {
 
     @Override
     public void run() {
-        double bitdepth = (double) image1.getBitDepth();
+        double bitdepth = (double) image1.getBitDepth(); //declare double for raising to power
         if (bitdepth == 16) {
             image1.deleteRoi(); //otherwise we create a partial duplicate
             image2 = image1.duplicate();
@@ -86,7 +86,6 @@ public class TemporalMedian implements Command, Previewable {
         } else {
             log.error("BitDepth must be 8 or 16 but was " + image1.getBitDepth());
         }
-
     }
 
     @Override
@@ -307,7 +306,7 @@ public class TemporalMedian implements Command, Previewable {
             }
         }
         log.info("finished!");
-        statusService.clearStatus();
+        statusService.showStatus(1,1,"FINISHED");
         if (cntzero > 0) {
             log.warn(cntzero + " pixels fell below 0");
         }
