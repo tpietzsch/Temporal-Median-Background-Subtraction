@@ -32,8 +32,8 @@ SOFTWARE.
 
 import ij.ImagePlus;
 import ij.ImageStack;
+import ij.process.ImageConverter;
 import ij.process.StackConverter;
-import ij.process.ImageProcessor;
 
 import org.scijava.ItemVisibility;
 import org.scijava.app.StatusService;
@@ -81,14 +81,19 @@ public class TemporalMedian implements Command, Previewable {
         double bitdepth = (double) image1.getBitDepth(); //declare double for raising to power
         if (bitdepth != 16) {
             log.warn("BitDepth must 16 but was " + image1.getBitDepth());
-            new StackConverter(image1).convertToGray16();
+            if (ImageConverter.getDoScaling()){
+                ImageConverter.setDoScaling(false);
+                new StackConverter(image1).convertToGray16();
+                ImageConverter.setDoScaling(true);
+            } else {
+                new StackConverter(image1).convertToGray16();
+            }
         }
         image1.deleteRoi(); //otherwise we create a partial duplicate
         image2 = image1.duplicate();
         image1.restoreRoi();
         substrmedian();
         image2.show();
-
     }
 
     @Override
