@@ -44,7 +44,7 @@ import org.scijava.plugin.Parameter;
 import org.scijava.plugin.Plugin;
 
 /**
- * Adds two datasets using the ImgLib2 framework.
+ * Subtracts the temporal median
  */
 @Plugin(type = Command.class, headless = true,
         menuPath = "NKI>Temporal Median")
@@ -80,7 +80,7 @@ public class TemporalMedian implements Command, Previewable {
     public void run() {
         double bitdepth = (double) image1.getBitDepth(); //declare double for raising to power
         if (bitdepth != 16) {
-            log.warn("BitDepth must 16 but was " + image1.getBitDepth());
+            log.warn("BitDepth must 16 but was " + image1.getBitDepth() + "will convert now");
             if (ImageConverter.getDoScaling()){
                 ImageConverter.setDoScaling(false);
                 new StackConverter(image1).convertToGray16();
@@ -110,7 +110,9 @@ public class TemporalMedian implements Command, Previewable {
      * Main calculation loop. Manipulates the data in image.
      */
     private void substrmedian() {
-        int values = (int) Math.pow(2, 16);
+        int windowC = (window - 1)/2; //0 indexed sorted array has median at this position.
+        if (window%2==0){window++;log.warn("No support for even windows. Window = "+window);}
+        int values = (int) 65536;
         log.info("finding largest dimension");
         final int dims[] = image1.getDimensions(); //0=width, 1=height, 2=nChannels, 3=nSlices, 4=nFrames
         final int dimension = dims[0] * dims[1]; // pixels per image, can be >32767 pixels
@@ -163,7 +165,7 @@ public class TemporalMedian implements Command, Previewable {
         short[] aux = new short[dimension];    //Marks the position of each median pixel in the column of the histogram, starting with 1
         log.info("start the big loop");
         int cntzero = 0; //count pixels that fall below zero
-        for (int k = 1; k <= (dims[mdim] - window); k++) //Each passing creates one median frame
+        for (int k = 1; k <= (1+dims[mdim] - window); k++) //Each passing creates one median frame
         {
             statusService.showProgress(k, dims[mdim]);
             if (k == 1) //Building the first histogram
@@ -181,12 +183,12 @@ public class TemporalMedian implements Command, Previewable {
                 for (int i = 0; i < dimension; i++) //Calculating the median
                 {
                     short count = 0, j = -1;
-                    while (count < (window / 2)) //Counting the histogram, until it reaches the median
+                    while (count <= windowC) //Counting the histogram, until it reaches the median
                     {
                         j++;
                         count += hist[i][j];
                     }
-                    aux[i] = (short) (count - (int) (Math.ceil(window / 2)) + 1);
+                    aux[i] = (short) (count - (int) windowC); //position in the bin. 1 is lowest.
                     median[i] = j;
                 }
                 log.info("done calculating median for first histogram");
@@ -277,7 +279,7 @@ public class TemporalMedian implements Command, Previewable {
             }
             if (k == 1) { //first median calculation. apply to k=1..window/2
                 log.info("apply first median");
-                for (int fr = 1; fr <= k + window / 2; fr++) {
+                for (int fr = 1; fr <= k + windowC; fr++) {
                     pixelsnew = (short[]) (stack2.getPixels(fr));
                     for (int j = 0; j < dimension; j++) {
                         pixelsnew[j] = (short) (pixelsnew[j] + offset - median[j] - addindex[median[j]]); //
@@ -288,7 +290,7 @@ public class TemporalMedian implements Command, Previewable {
                     }
                 }
             } else { //apply to frame in centre of the medianwindow
-                pixelsnew = (short[]) (stack2.getPixels(k + window / 2));
+                pixelsnew = (short[]) (stack2.getPixels(k + windowC));
                 for (int j = 0; j < dimension; j++) {
                     pixelsnew[j] = (short) (pixelsnew[j] + offset - median[j] - addindex[median[j]]); //
                     if (pixelsnew[j] < 0) {
@@ -302,7 +304,7 @@ public class TemporalMedian implements Command, Previewable {
             }
         }
         log.info("apply last median");
-        for (int k = 1 + dims[mdim] - window / 2; k <= dims[mdim]; k++) { //apply last medan to remaining frames
+        for (int k = 1 + dims[mdim] - windowC; k <= dims[mdim]; k++) { //apply last medan to remaining frames
             pixelsnew = (short[]) (stack2.getPixels(k));
             for (int j = 0; j < dimension; j++) {
                 pixelsnew[j] = (short) (pixelsnew[j] + offset - median[j] - addindex[median[j]]); //

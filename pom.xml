@@ -14,10 +14,10 @@
 
     <groupId>nl.nki-avl</groupId>
     <artifactId>TemporalMedian</artifactId>
-    <version>1.2.1</version>
+    <version>1.3</version>
 
     <name>Temporal Median Filter</name>
-    <description>This plugin provides a temporal median filter using the ImgLib OPS framework to do parallel calculation. It was developed for pre-processing of large SMLM datasets.</description>
+    <description>This plugin provides a temporal median filter. It was developed for pre-processing of large SMLM datasets to remove background.</description>
     <url>https://github.com/rharkes/TemporalMedian</url>
     <inceptionYear>2017</inceptionYear>
     <organization>
