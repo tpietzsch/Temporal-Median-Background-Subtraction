@@ -15,6 +15,8 @@ Changes:
 * The possibility to add an offset to the data before median removal to prevent rounding errors.
 * Normalization of data was removed
 * Custom start and finish of filter was removed
+* Automatic correction of even windowsizes
+* Automatic conversion to 16-bit
 
 Used articles:
 T.S.Huang et al. 1979 - Original algorithm for median calculation
