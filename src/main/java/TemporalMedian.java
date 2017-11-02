@@ -47,7 +47,7 @@ import org.scijava.plugin.Plugin;
  * Subtracts the temporal median
  */
 @Plugin(type = Command.class, headless = true,
-        menuPath = "NKI>Temporal Median")
+        menuPath = "Plugins>Temporal Median")
 public class TemporalMedian implements Command, Previewable {
 
     private ImagePlus image2 = null;
@@ -80,7 +80,7 @@ public class TemporalMedian implements Command, Previewable {
     public void run() {
         double bitdepth = (double) image1.getBitDepth(); //declare double for raising to power
         if (bitdepth != 16) {
-            log.warn("BitDepth must 16 but was " + image1.getBitDepth() + "will convert now");
+            log.warn("BitDepth must 16 but was " + image1.getBitDepth() + ". Will convert now");
             if (ImageConverter.getDoScaling()){
                 ImageConverter.setDoScaling(false);
                 new StackConverter(image1).convertToGray16();
