@@ -30,6 +30,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
  */
 
+import ij.IJ;
 import ij.ImagePlus;
 import ij.ImageStack;
 import ij.process.ImageConverter;
@@ -57,9 +58,6 @@ public class TemporalMedian implements Command, Previewable {
 
     @Parameter
     private StatusService statusService;
-
-    @Parameter(visibility = ItemVisibility.MESSAGE)
-    private final String header = "Temporal Medianfilter Options";
 
     @Parameter(label = "Select image", description = "the image field")
     private ImagePlus image1;
@@ -93,7 +91,11 @@ public class TemporalMedian implements Command, Previewable {
         image2 = image1.duplicate();
         image1.restoreRoi();
         substrmedian();
+        image2.setTitle("MEDFILT_"+image1.getTitle());
+        image2.setDisplayMode(IJ.GRAYSCALE);
         image2.show();
+        image1.changes=false;
+        image1.close();
     }
 
     @Override
@@ -289,6 +291,7 @@ public class TemporalMedian implements Command, Previewable {
                         }
                     }
                 }
+                log.info("Start loop for all other medians");
             } else { //apply to frame in centre of the medianwindow
                 pixelsnew = (short[]) (stack2.getPixels(k + windowC));
                 for (int j = 0; j < dimension; j++) {
@@ -317,7 +320,7 @@ public class TemporalMedian implements Command, Previewable {
         log.info("finished!");
         statusService.showStatus(1, 1, "FINISHED");
         if (cntzero > 0) {
-            log.warn(cntzero + " pixels fell below 0");
+            log.warn(cntzero + "pixels fell below zero , " + (cntzero/dims[mdim]) + " pixels/frame");
         }
     }
 }
