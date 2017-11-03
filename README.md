@@ -12,7 +12,7 @@ Implementation of the algorithm in a maven .jar for easy deployment in Fiji (Ima
 Changes:
 * The window is changed from forward to central.
 * The empty bins in the histogram are removed beforehand to reduce memory usage.
-* The possibility to add an offset to the data before median removal to prevent integer underflow.
+* The possibility to add an offset to the data before median removal to prevent integer overflow.
 * Normalization of data was removed
 * Custom start and finish of filter was removed
 * Automatic correction of even windowsizes
