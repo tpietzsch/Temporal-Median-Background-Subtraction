@@ -7,7 +7,7 @@ with the help of Professor Josh Milstein during the summer of 2014, as part of t
 Science Without Borders research opportunity program.
 
 Copyright (c) 2017 Bram van den Broek and Rolf Harkes, Dutch Cancer Institute of Amsterdam.
-Implementation of the algorithm in a maven .jar for easy deployment in Fiji (ImageJ2)
+Implementation of the algorithm in a maven .jar for easy deployment in Fiji (ImageJ2). Adaption is released under the GPL V3
 
 Changes:
 * The window is changed from forward to central.
