@@ -112,8 +112,6 @@ public class TemporalMedian implements Command, Previewable {
      * Main calculation loop. Manipulates the data in image.
      */
     private void substrmedian() {
-        int windowC = (window - 1)/2; //0 indexed sorted array has median at this position.
-        if (window%2==0){window++;log.warn("No support for even windows. Window = "+window);}
         int values = (int) 65536;
         log.info("finding largest dimension");
         final int dims[] = image1.getDimensions(); //0=width, 1=height, 2=nChannels, 3=nSlices, 4=nFrames
@@ -127,6 +125,11 @@ public class TemporalMedian implements Command, Previewable {
             }
         }
         log.info("taking dimension " + mdim + " with length " + String.valueOf(dims[mdim]));
+
+        if (window >= (short)dims[mdim]) {window = (short)dims[mdim];log.warn("Window is larger than largest dimension. Reducing window to "+window);}
+        int windowC = (window - 1)/2; //0 indexed sorted array has median at this position.
+        if (window%2==0) {window++;log.warn("No support for even windows. Window = "+window);}        
+
         log.info("loading datastacks");
         final ImageStack stack = image1.getStack();
         final ImageStack stack2 = image2.getStack();
