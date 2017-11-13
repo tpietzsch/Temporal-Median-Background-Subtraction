@@ -124,7 +124,7 @@ public class TemporalMedian implements Command, Previewable {
             }
             //do calculation (make this parallel!)
             for (int i = 0;i<blocks;i++){
-                stacks[i]=substrmedian(stacks[i]);
+                stacks[i]=substrmedian(stacks[i],window,offset);
             }
             //concantonate the images
             log.info("Start to combine images");
@@ -138,7 +138,7 @@ public class TemporalMedian implements Command, Previewable {
             image2.setDisplayMode(IJ.GRAYSCALE);
             image2.show();
         } else { //all at once
-            ImageStack stack2 = substrmedian(stack1);
+            ImageStack stack2 = substrmedian(stack1,window,offset);
             ImagePlus image2 = new ImagePlus("MedianFiltered",stack2);
             image2.setTitle("MEDFILT_" + image1.getTitle());
             image2.setDisplayMode(IJ.GRAYSCALE);
@@ -161,9 +161,11 @@ public class TemporalMedian implements Command, Previewable {
     /**
      * Main calculation loop. Manipulates the data in image.
      * @param stack1
+     * @param window
+     * @param offset
      * @return 
      */
-    public ImageStack substrmedian(ImageStack stack1) {
+    public ImageStack substrmedian(ImageStack stack1,int window,int offset) {
         ImageStack stack2 = stack1.duplicate();
         int values = (int) 65536;
         int w = stack1.getWidth();
