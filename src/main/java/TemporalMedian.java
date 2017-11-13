@@ -89,35 +89,37 @@ public class TemporalMedian implements Command, Previewable {
                 new StackConverter(image1).convertToGray16();
             }
         }
-        log.info("finding largest dimension");
-        int dims[] = image1.getDimensions();
-        byte mdim = 0;
-        int dimsize = 0;
-        for (byte i = 2; i <= 4; i++) {
-            if (dims[i] > dimsize) {
-                mdim = i;
-                dimsize = dims[i];
-            }
-        }
-        log.info("taking dimension " + mdim + " with length " + String.valueOf(dims[mdim]));
         
+        //get datastack
+        image1.deleteRoi(); //remove to prevent a partial duplicate
+        ImageStack stack1=image1.getStack();
+        int w = stack1.getWidth();
+        int h = stack1.getHeight();
+        int t = stack1.getSize();
+        //sanity check on the input
+        if (window % 2 == 0) {
+            window++;
+            log.warn("No support for even windows. Window = " + window);
+        }
+        if (window >= (short) t) {
+            window = (short) t;
+            log.warn("Window is larger than largest dimension. Reducing window to " + window);
+        }
         //split ?
         if (split) { //split in parts
             int blocks = Runtime.getRuntime().availableProcessors();
-            int L = dims[1]%blocks; //nr of large blocks
-            int S = dims[1]/blocks; //size of small block (default = floor)
+            int L = h%blocks; //nr of large blocks
+            int S = h/blocks; //size of small block (default = floor)
             int cutt = 0;
             ImageStack[] stacks = new ImageStack[blocks];
-            ImageStack stack1=image1.getStack();
-            int t = stack1.getSize();
             for (int i = 0;i<L;i++) {
-                stacks[i] = stack1.crop(0, cutt, 0, dims[0], S+1, t);
+                stacks[i] = stack1.crop(0, cutt, 0, w, S+1, t);
                 log.info("ROI from y=" + cutt + " with width " + (S+1));
                 cutt += (S+1);
             }
             for (int i = L;i<blocks;i++) {
                 log.info("ROI from y=" + cutt + " with width " + S);
-                stacks[i] = stack1.crop(0, cutt, 0, dims[0], S, t);
+                stacks[i] = stack1.crop(0, cutt, 0, w, S, t);
                 cutt += (S);
             }
             //do calculation (make this parallel!)
@@ -136,9 +138,8 @@ public class TemporalMedian implements Command, Previewable {
             image2.setDisplayMode(IJ.GRAYSCALE);
             image2.show();
         } else { //all at once
-            image1.deleteRoi(); //remove to prevent a partial duplicate
-            ImageStack stack1 = substrmedian(image1.getStack());
-            ImagePlus image2 = new ImagePlus("MedianFiltered",stack1);
+            ImageStack stack2 = substrmedian(stack1);
+            ImagePlus image2 = new ImagePlus("MedianFiltered",stack2);
             image2.setTitle("MEDFILT_" + image1.getTitle());
             image2.setDisplayMode(IJ.GRAYSCALE);
             image2.show();
@@ -169,18 +170,8 @@ public class TemporalMedian implements Command, Previewable {
         int h = stack1.getHeight();
         int t = stack1.getSize();
         int dimension = w*h;
-        if (window >= (short) t) {
-            window = (short) t;
-            log.warn("Window is larger than largest dimension. Reducing window to " + window);
-        }
         int windowC = (window - 1) / 2; //0 indexed sorted array has median at this position.
-        if (window % 2 == 0) {
-            window++;
-            log.warn("No support for even windows. Window = " + window);
-        }
-
         log.info("loading datastacks");
-
         log.info("determine needed bitdepth with an initial histogram");
         boolean inihist[] = new boolean[values]; //does the value exist?
         short[] pixels = new short[dimension]; //pixel data from image1
