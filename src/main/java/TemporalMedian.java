@@ -35,8 +35,9 @@ import ij.ImagePlus;
 import ij.ImageStack;
 import ij.process.ImageConverter;
 import ij.process.StackConverter;
+import ij.plugin.Concatenator;
+import ij.plugin.StackCombiner;
 
-import org.scijava.ItemVisibility;
 import org.scijava.app.StatusService;
 import org.scijava.command.Command;
 import org.scijava.command.Previewable;
@@ -50,8 +51,6 @@ import org.scijava.plugin.Plugin;
 @Plugin(type = Command.class, headless = true,
         menuPath = "Plugins>Temporal Median")
 public class TemporalMedian implements Command, Previewable {
-
-    private ImagePlus image2 = null;
 
     @Parameter
     private LogService log;
@@ -68,6 +67,9 @@ public class TemporalMedian implements Command, Previewable {
     @Parameter(label = "Added offset", description = "offset added to the new image")
     private short offset;
 
+    @Parameter(label = "split stack?", description = "split the image stack")
+    private boolean split;
+
     //@Parameter(label = "Ignore this", description = "Do not use this field", visibility = ItemVisibility.INVISIBLE)
     //private ImagePlus IGNOREimage; //never used, need for getting a list selection for image1
     public static void main(final String... args) throws Exception {
@@ -79,7 +81,7 @@ public class TemporalMedian implements Command, Previewable {
         double bitdepth = (double) image1.getBitDepth(); //declare double for raising to power
         if (bitdepth != 16) {
             log.warn("BitDepth must 16 but was " + image1.getBitDepth() + ". Will convert now");
-            if (ImageConverter.getDoScaling()){
+            if (ImageConverter.getDoScaling()) {
                 ImageConverter.setDoScaling(false);
                 new StackConverter(image1).convertToGray16();
                 ImageConverter.setDoScaling(true);
@@ -87,14 +89,61 @@ public class TemporalMedian implements Command, Previewable {
                 new StackConverter(image1).convertToGray16();
             }
         }
-        image1.deleteRoi(); //otherwise we create a partial duplicate
-        image2 = image1.duplicate();
-        image1.restoreRoi();
-        substrmedian();
-        image2.setTitle("MEDFILT_"+image1.getTitle());
-        image2.setDisplayMode(IJ.GRAYSCALE);
-        image2.show();
-        image1.changes=false;
+        log.info("finding largest dimension");
+        int dims[] = image1.getDimensions();
+        byte mdim = 0;
+        int dimsize = 0;
+        for (byte i = 2; i <= 4; i++) {
+            if (dims[i] > dimsize) {
+                mdim = i;
+                dimsize = dims[i];
+            }
+        }
+        log.info("taking dimension " + mdim + " with length " + String.valueOf(dims[mdim]));
+        
+        //split ?
+        if (split) { //split in parts
+            int blocks = Runtime.getRuntime().availableProcessors();
+            int L = dims[1]%blocks; //nr of large blocks
+            int S = dims[1]/blocks; //size of small block (default = floor)
+            int cutt = 0;
+            ImageStack[] stacks = new ImageStack[blocks];
+            ImageStack stack1=image1.getStack();
+            int t = stack1.getSize();
+            for (int i = 0;i<L;i++) {
+                stacks[i] = stack1.crop(0, cutt, 0, dims[0], S+1, t);
+                log.info("ROI from y=" + cutt + " with width " + (S+1));
+                cutt += (S+1);
+            }
+            for (int i = L;i<blocks;i++) {
+                log.info("ROI from y=" + cutt + " with width " + S);
+                stacks[i] = stack1.crop(0, cutt, 0, dims[0], S, t);
+                cutt += (S);
+            }
+            //do calculation (make this parallel!)
+            for (int i = 0;i<blocks;i++){
+                stacks[i]=substrmedian(stacks[i]);
+            }
+            //concantonate the images
+            log.info("Start to combine images");
+            StackCombiner combiner = new ij.plugin.StackCombiner();
+            ImageStack stack2 = stacks[0];
+            for (int i = 1;i<blocks;i++){
+                stack2 = combiner.combineVertically(stack2, stacks[i]);
+            }
+            ImagePlus image2 = new ImagePlus("MedianFiltered",stack2);
+            image2.setTitle("MEDFILT_" + image1.getTitle());
+            image2.setDisplayMode(IJ.GRAYSCALE);
+            image2.show();
+        } else { //all at once
+            image1.deleteRoi(); //remove to prevent a partial duplicate
+            ImageStack stack1 = substrmedian(image1.getStack());
+            ImagePlus image2 = new ImagePlus("MedianFiltered",stack1);
+            image2.setTitle("MEDFILT_" + image1.getTitle());
+            image2.setDisplayMode(IJ.GRAYSCALE);
+            image2.show();
+        }        
+        image1.changes = false;
         image1.close();
     }
 
@@ -110,38 +159,36 @@ public class TemporalMedian implements Command, Previewable {
 
     /**
      * Main calculation loop. Manipulates the data in image.
+     * @param stack1
+     * @return 
      */
-    private void substrmedian() {
+    public ImageStack substrmedian(ImageStack stack1) {
+        ImageStack stack2 = stack1.duplicate();
         int values = (int) 65536;
-        log.info("finding largest dimension");
-        final int dims[] = image1.getDimensions(); //0=width, 1=height, 2=nChannels, 3=nSlices, 4=nFrames
-        final int dimension = dims[0] * dims[1]; // pixels per image, can be >32767 pixels
-        byte mdim = 0;
-        int dimsize = 0;
-        for (byte i = 2; i <= 4; i++) {
-            if (dims[i] > dimsize) {
-                mdim = i;
-                dimsize = dims[i];
-            }
+        int w = stack1.getWidth();
+        int h = stack1.getHeight();
+        int t = stack1.getSize();
+        int dimension = w*h;
+        if (window >= (short) t) {
+            window = (short) t;
+            log.warn("Window is larger than largest dimension. Reducing window to " + window);
         }
-        log.info("taking dimension " + mdim + " with length " + String.valueOf(dims[mdim]));
-
-        if (window >= (short)dims[mdim]) {window = (short)dims[mdim];log.warn("Window is larger than largest dimension. Reducing window to "+window);}
-        int windowC = (window - 1)/2; //0 indexed sorted array has median at this position.
-        if (window%2==0) {window++;log.warn("No support for even windows. Window = "+window);}        
+        int windowC = (window - 1) / 2; //0 indexed sorted array has median at this position.
+        if (window % 2 == 0) {
+            window++;
+            log.warn("No support for even windows. Window = " + window);
+        }
 
         log.info("loading datastacks");
-        final ImageStack stack = image1.getStack();
-        final ImageStack stack2 = image2.getStack();
 
         log.info("determine needed bitdepth with an initial histogram");
         boolean inihist[] = new boolean[values]; //does the value exist?
         short[] pixels = new short[dimension]; //pixel data from image1
-        for (int k = 1; k <= dims[mdim]; k++) {
-            pixels = (short[]) (stack.getPixels(k));
+        for (int k = 1; k <= t; k++) {
+            pixels = (short[]) (stack1.getPixels(k));
             for (int j = 0; j < dimension; j++) //For each pixel in this frame
             {
-                inihist[pixels[j]]=true; //Add it to the histogram pixelvalues cannot be >32767 since short is signed
+                inihist[pixels[j]] = true; //Add it to the histogram pixelvalues cannot be >32767 since short is signed
             }
         }
         log.info("finished initialhistogram");
@@ -170,15 +217,15 @@ public class TemporalMedian implements Command, Previewable {
         short[] aux = new short[dimension];    //Marks the position of each median pixel in the column of the histogram, starting with 1
         log.info("start the big loop");
         int cntzero = 0; //count pixels that fall below zero
-        for (int k = 1; k <= (1+dims[mdim] - window); k++) //Each passing creates one median frame
+        for (int k = 1; k <= (1 + t - window); k++) //Each passing creates one median frame
         {
-            statusService.showProgress(k, dims[mdim]);
+            statusService.showProgress(k, t);
             if (k == 1) //Building the first histogram
             {
                 log.info("calculating first histogram");
                 for (int i = 1; i <= window; i++) //For each frame inside the window
                 {
-                    pixels = (short[]) (stack.getPixels(i + k - 1)); //Save all the pixels of the frame "i+k-1" in "pixels" (starting with 1)
+                    pixels = (short[]) (stack1.getPixels(i + k - 1)); //Save all the pixels of the frame "i+k-1" in "pixels" (starting with 1)
                     for (int j = 0; j < dimension; j++) //For each pixel in this frame
                     {
                         pixels[j] = (short) (pixels[j] - subtract[pixels[j]]); //remove empty values to shorten the histogram
@@ -198,8 +245,8 @@ public class TemporalMedian implements Command, Previewable {
                 }
                 log.info("done calculating median for first histogram");
             } else {
-                pixels = (short[]) (stack.getPixels(k - 1)); //Old pixels, remove them from the histogram
-                pixels2 = (short[]) (stack.getPixels(k + window - 1)); //New pixels, add them to the histogram
+                pixels = (short[]) (stack1.getPixels(k - 1)); //Old pixels, remove them from the histogram
+                pixels2 = (short[]) (stack1.getPixels(k + window - 1)); //New pixels, add them to the histogram
                 for (int i = 0; i < dimension; i++) //Calculating the new median
                 {
                     //pixels[i] =(short) (pixels[i] - subtract[pixels[i]]); //already subtracted before
@@ -310,7 +357,7 @@ public class TemporalMedian implements Command, Previewable {
             }
         }
         log.info("apply last median");
-        for (int k = 1 + dims[mdim] - windowC; k <= dims[mdim]; k++) { //apply last medan to remaining frames
+        for (int k = 1 + t - windowC; k <= t; k++) { //apply last medan to remaining frames
             pixelsnew = (short[]) (stack2.getPixels(k));
             for (int j = 0; j < dimension; j++) {
                 pixelsnew[j] = (short) (pixelsnew[j] + offset - median[j] - addindex[median[j]]); //
@@ -323,7 +370,8 @@ public class TemporalMedian implements Command, Previewable {
         log.info("finished!");
         statusService.showStatus(1, 1, "FINISHED");
         if (cntzero > 0) {
-            log.warn(cntzero + "pixels fell below zero , " + (cntzero/dims[mdim]) + " pixels/frame");
+            log.warn(cntzero + "pixels fell below zero , " + (cntzero / t) + " pixels/frame");
         }
+        return stack2;
     }
 }

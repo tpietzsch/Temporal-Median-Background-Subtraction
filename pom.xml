@@ -14,7 +14,7 @@
 
     <groupId>nl.nki-avl</groupId>
     <artifactId>TemporalMedian</artifactId>
-    <version>1.31</version>
+    <version>1.31-SNAPSHOT</version>
 
     <name>Temporal Median Filter</name>
     <description>This plugin provides a temporal median filter. It was developed for pre-processing of large SMLM datasets to remove background.</description>
@@ -26,8 +26,8 @@
     </organization>
     <licenses>
         <license>
-            <name>CC0 1.0 Universal License</name>
-            <url>http://creativecommons.org/publicdomain/zero/1.0/</url>
+            <name>GPL v3</name>
+            <url>http://www.gnu.org/licenses/</url>
             <distribution>repo</distribution>
         </license>
     </licenses>
