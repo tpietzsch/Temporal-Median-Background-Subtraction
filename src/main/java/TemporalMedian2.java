@@ -105,11 +105,11 @@ public class TemporalMedian2 implements Command, Previewable {
             log.warn("Window is larger than largest dimension. Reducing window to " + window);
         }
         //allocate data storage
-        log.info("allocating datastorage");
+        log.debug("allocating datastorage");
         short data[] = new short[t * pixels];
         short temp[] = new short[pixels];
-        log.info("finished");
-        log.info("loading data from stack");
+        log.debug("finished");
+        log.debug("loading data from stack");
         boolean inihist[] = new boolean[65536];
         for (int i = 0; i < t; i++) {
             temp = (short[]) stack1.getPixels(i + 1);
@@ -153,12 +153,12 @@ public class TemporalMedian2 implements Command, Previewable {
 
     @Override
     public void cancel() {
-        log.info("Cancelled");
+        log.debug("Cancelled");
     }
 
     @Override
     public void preview() {
-        log.info("previews median");
+        log.debug("previews median");
     }
 
     //two methods for concurrent calculation
@@ -223,7 +223,7 @@ public class TemporalMedian2 implements Command, Previewable {
             //statusService.showProgress(k, t);
             if (t == 0) //Building the first histogram
             {
-                //log.info("calculating first histogram");
+                //log.debug("calculating first histogram");
                 for (int t2 = 0; t2 <= window; t2++) //For each frame inside the window
                 {
                     hist[data[step + t2]]++; //Add it to the histogram
