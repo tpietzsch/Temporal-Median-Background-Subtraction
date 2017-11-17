@@ -129,7 +129,7 @@ public class TemporalMedian implements Command, Previewable {
             for (int ithread = 0; ithread < threads.length; ithread++) { 
                 threads[ithread] = new Thread() { //make threads
                     {
-                        setPriority(Thread.NORM_PRIORITY);
+                        setPriority(Thread.MAX_PRIORITY);
                     }
                     public void run() {
                         for (int i = ai.getAndIncrement(); i < blocks; i = ai.getAndIncrement()) { //get unique i
@@ -142,7 +142,7 @@ public class TemporalMedian implements Command, Previewable {
             }
             startAndJoin(threads);
             //concantonate the images
-            log.info("Start to combine images");
+            log.info("Start to combine blocks");
             StackCombiner combiner = new ij.plugin.StackCombiner();
             ImageStack stack2 = stacks[0];
             for (int i = 1; i < blocks; i++) {
@@ -181,7 +181,7 @@ public class TemporalMedian implements Command, Previewable {
 
     public static void startAndJoin(Thread[] threads) {
         for (int ithread = 0; ithread < threads.length; ++ithread) {
-            threads[ithread].setPriority(Thread.NORM_PRIORITY);
+            threads[ithread].setPriority(Thread.MAX_PRIORITY);
             threads[ithread].start();
         }
 
@@ -210,7 +210,6 @@ public class TemporalMedian implements Command, Previewable {
         int t = stack1.getSize();
         int dimension = w * h;
         int windowC = (window - 1) / 2; //0 indexed sorted array has median at this position.
-        //log.info("loading datastacks");
         //log.info("determine needed bitdepth with an initial histogram");
         boolean inihist[] = new boolean[values]; //does the value exist?
         short[] pixels = new short[dimension]; //pixel data from image1
@@ -245,7 +244,7 @@ public class TemporalMedian implements Command, Previewable {
         short hist[][] = new short[dimension][values]; //Gray-level histogram init at 0
         short[] median = new short[dimension]; //Array to save the median pixels
         short[] aux = new short[dimension];    //Marks the position of each median pixel in the column of the histogram, starting with 1
-        //log.info("start the big loop");
+        log.info("start the big loop");
         int cntzero = 0; //count pixels that fall below zero
         for (int k = 1; k <= (1 + t - window); k++) //Each passing creates one median frame
         {
