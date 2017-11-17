@@ -1,26 +1,19 @@
 /* Fast Temporal Median filter 
-Copyright (c) 2014, Marcelo Augusto Cordeiro, Milstein Lab, University of Toronto
-This ImageJ plugin was developed for the Milstein Lab at the University of Toronto,
-with the help of Professor Josh Milstein during the summer of 2014, as part of the
-Science Without Borders research opportunity program.
-
-In 2017 Bram van den Broek and Rolf Harkes, Dutch Cancer Institute of Amsterdam 
-implemented the algorithm in a maven .jar for easy deployment in Fiji (ImageJ2)
-The window is changed from forward to central.
-The empty bins in the histogram are removed beforehand to reduce memory usage.
-The possibility to add an offset to the data before median removal to prevent rounding errors.
+In 2017 Rolf Harkes and Bram van den Broek, Netherlands Cancer Institute, 
+implemented the T.S.Huang algorithm in a maven .jar for easy deployment in Fiji (ImageJ2)
+The data is read to a single array and each pixel is processed in parallel. 
+The filter is intended for pre-processing of single molecule localization data.
+A dataset of 180x180x25000 pixels was filtered in 15 seconds on a regular PC.
 
 Used articles:
 T.S.Huang et al. 1979 - Original algorithm for median calculation
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+This software is released under the GPL v3. You may copy, distribute and modify 
+the software as long as you track changes/dates in source files. Any 
+modifications to or software including (via compiler) GPL-licensed code 
+must also be made available under the GPL along with build & install instructions.
+https://www.gnu.org/licenses/gpl-3.0.en.html
+
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -35,8 +28,6 @@ import ij.ImagePlus;
 import ij.ImageStack;
 import ij.process.ImageConverter;
 import ij.process.StackConverter;
-import ij.plugin.Concatenator;
-import ij.plugin.StackCombiner;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.scijava.app.StatusService;
@@ -68,9 +59,6 @@ public class TemporalMedian implements Command, Previewable {
     @Parameter(label = "Added offset", description = "offset added to the new image")
     private short offset;
 
-    @Parameter(label = "split stack?", description = "split the image stack")
-    private boolean split;
-
     //@Parameter(label = "Ignore this", description = "Do not use this field", visibility = ItemVisibility.INVISIBLE)
     //private ImagePlus IGNOREimage; //never used, need for getting a list selection for image1
     public static void main(final String... args) throws Exception {
@@ -90,13 +78,14 @@ public class TemporalMedian implements Command, Previewable {
                 new StackConverter(image1).convertToGray16();
             }
         }
-
         //get datastack
         image1.deleteRoi(); //remove to prevent a partial duplicate
         ImageStack stack1 = image1.getStack();
         int w = stack1.getWidth();
         int h = stack1.getHeight();
         int t = stack1.getSize();
+        int pixels = w * h;
+        statusService.showProgress(0, pixels);
         //sanity check on the input
         if (window % 2 == 0) {
             window++;
@@ -106,71 +95,70 @@ public class TemporalMedian implements Command, Previewable {
             window = (short) t;
             log.warn("Window is larger than largest dimension. Reducing window to " + window);
         }
-        //split ?
-        if (split) { //split in parts
-            int blocks = Runtime.getRuntime().availableProcessors();
-            int L = h % blocks; //nr of large blocks
-            int S = h / blocks; //size of small block (default = floor)
-            int cutt = 0;
-            ImageStack[] stacks = new ImageStack[blocks];
-            for (int i = 0; i < L; i++) {
-                stacks[i] = stack1.crop(0, cutt, 0, w, S + 1, t);
-                log.info("Block "+ i +" from y=" + cutt + " with width " + (S + 1));
-                cutt += (S + 1);
+        //allocate data storage
+        log.debug("allocating datastorage");
+        short data[] = new short[t * pixels];
+        short temp[] = new short[pixels];
+        log.debug("finished");
+        log.debug("loading data from stack");
+        boolean inihist[] = new boolean[65536];
+        for (int i = 0; i < t; i++) { //all timepoints
+            temp = (short[]) stack1.getPixels(i + 1); 
+            for (int p = 0; p < pixels; p++) {//all pixels
+                data[i + p * t] = temp[p];
+                inihist[temp[p]] = true;
             }
-            for (int i = L; i < blocks; i++) {
-                log.info("Block "+ i +" from y=" + cutt + " with width " + S);
-                stacks[i] = stack1.crop(0, cutt, 0, w, S, t);
-                cutt += (S);
-            }
-            //do calculation in parallel
-            final AtomicInteger ai = new AtomicInteger(0); //special unqique int for each thread
-            final Thread[] threads = newThreadArray(); //all threads
-            for (int ithread = 0; ithread < threads.length; ithread++) { 
-                threads[ithread] = new Thread() { //make threads
-                    {
-                        setPriority(Thread.MAX_PRIORITY);
-                    }
-                    public void run() {
-                        for (int i = ai.getAndIncrement(); i < blocks; i = ai.getAndIncrement()) { //get unique i
-                            log.info("starting on block " + i + " now.");
-                            stacks[i] = substrmedian(stacks[i], window, offset);
-                            log.info("Finished block " + i + "!");
+        }
+        log.debug("finished");
+        log.debug("compress data");
+        //compress data
+        int addindex[] = compress(data, inihist);
+        log.debug("finished");
+        //do calculation in parallel per pixel
+        final AtomicInteger ai = new AtomicInteger(0); //special unqique int for each thread
+        final Thread[] threads = newThreadArray(); //all threads
+        for (int ithread = 0; ithread < threads.length; ithread++) {
+            threads[ithread] = new Thread() { //make threads
+                {
+                    setPriority(Thread.NORM_PRIORITY);
+                }
+                public void run() {
+                    for (int i = ai.getAndIncrement(); i < pixels; i = ai.getAndIncrement()) { //get unique i
+                        substrmedian(data, i, t, addindex);
+                        if ((i%200)==0){
+                            statusService.showProgress(i, pixels);
                         }
                     }
-                }; //end of thread creation
-            }
-            startAndJoin(threads);
-            //concantonate the images
-            log.info("Start to combine blocks");
-            StackCombiner combiner = new ij.plugin.StackCombiner();
-            ImageStack stack2 = stacks[0];
-            for (int i = 1; i < blocks; i++) {
-                stack2 = combiner.combineVertically(stack2, stacks[i]);
-            }
-            ImagePlus image2 = new ImagePlus("MedianFiltered", stack2);
-            image2.setTitle("MEDFILT_" + image1.getTitle());
-            image2.setDisplayMode(IJ.GRAYSCALE);
-            image2.show();
-        } else { //all at once
-            ImageStack stack2 = substrmedian(stack1, window, offset);
-            ImagePlus image2 = new ImagePlus("MedianFiltered", stack2);
-            image2.setTitle("MEDFILT_" + image1.getTitle());
-            image2.setDisplayMode(IJ.GRAYSCALE);
-            image2.show();
+                }
+            }; //end of thread creation
         }
-        image1.changes = false;
-        image1.close();
+        startAndJoin(threads);
+        //make stack and count zeros
+        int zeros = 0;
+        for (int i = 0; i < t; i++) { //all timepoints
+            for (int p = 0; p < pixels; p++) { //all pixels
+                temp[p] = data[i + p * t];
+                if (temp[p]<0){zeros++;temp[p]=0;}
+            }
+            stack1.setPixels(temp.clone(), (i+1));
+        }
+        if (zeros>0&&(zeros/t)<10){log.info(zeros + " pixels went below zero. Concider increasing the offset." + (zeros/t) + " pixels per frame.");}
+        if ((zeros/t)>=10){log.warn(zeros + " pixels went below zero. Concider increasing the offset." + (zeros/t) + " pixels per frame.");}
+        image1.setStack(stack1);
+        image1.setTitle("MEDFILT_" + image1.getTitle());
+        image1.setDisplayMode(IJ.GRAYSCALE);
+        image1.show();
+        statusService.showStatus(1, 1, "FINISHED");
     }
 
     @Override
     public void cancel() {
-        log.info("Cancelled");
+        log.debug("Cancelled");
     }
 
     @Override
     public void preview() {
-        log.info("previews median");
+        log.debug("previews median");
     }
 
     //two methods for concurrent calculation
@@ -181,10 +169,9 @@ public class TemporalMedian implements Command, Previewable {
 
     public static void startAndJoin(Thread[] threads) {
         for (int ithread = 0; ithread < threads.length; ++ithread) {
-            threads[ithread].setPriority(Thread.MAX_PRIORITY);
+            threads[ithread].setPriority(Thread.NORM_PRIORITY);
             threads[ithread].start();
         }
-
         try {
             for (int ithread = 0; ithread < threads.length; ++ithread) {
                 threads[ithread].join();
@@ -194,213 +181,155 @@ public class TemporalMedian implements Command, Previewable {
         }
     }
 
-    /**
-     * Main calculation loop. Manipulates the data in image.
-     *
-     * @param stack1
-     * @param window
-     * @param offset
-     * @return
-     */
-    public ImageStack substrmedian(ImageStack stack1, int window, int offset) {
-        ImageStack stack2 = stack1.duplicate();
+    public static int[] compress(short[] data, boolean[] inihist) {
         int values = (int) 65536;
-        int w = stack1.getWidth();
-        int h = stack1.getHeight();
-        int t = stack1.getSize();
-        int dimension = w * h;
-        int windowC = (window - 1) / 2; //0 indexed sorted array has median at this position.
-        //log.info("determine needed bitdepth with an initial histogram");
-        boolean inihist[] = new boolean[values]; //does the value exist?
-        short[] pixels = new short[dimension]; //pixel data from image1
-        for (int k = 1; k <= t; k++) {
-            pixels = (short[]) (stack1.getPixels(k));
-            for (int j = 0; j < dimension; j++) //For each pixel in this frame
-            {
-                inihist[pixels[j]] = true; //Add it to the histogram pixelvalues cannot be >32767 since short is signed
-            }
-        }
-        //log.info("finished initialhistogram");
-        //log.info("finding subtraction values");
         int subtract[] = new int[values];
-        int addindex[] = new int[values];
+        int decompressF[] = new int[values]; //decompress array decompress[data] --> original data
         int idx = 0;
         int subtractvalue = 0;
         for (int i = 0; i < values; i++) {
             if (inihist[i]) {
                 subtract[i] = subtractvalue;
-                addindex[idx] = subtractvalue;
+                decompressF[idx] = subtractvalue + idx;
                 idx++;
             } else {
                 subtractvalue++;
             }
         }
-        values -= subtractvalue;
+        //trim the decompress array
+        int decompress[] = new int[idx];
+        System.arraycopy(decompressF, 0, decompress, 0, idx);
+        //compress data
+        for (int i = 0; i < data.length; i++) {
+            data[i] -= subtract[data[i]];
+        }
+        return decompress;
+    }
 
-        //log.info("found " + values + " unique values in the image");
-        //log.info("reserve memory for median calculations");
-        short[] pixels2 = new short[dimension]; //pixel data from image1 to be added
-        short[] pixelsnew = new short[dimension]; //pixel data from image2 to be udpated
-        short hist[][] = new short[dimension][values]; //Gray-level histogram init at 0
-        short[] median = new short[dimension]; //Array to save the median pixels
-        short[] aux = new short[dimension];    //Marks the position of each median pixel in the column of the histogram, starting with 1
-        log.info("start the big loop");
-        int cntzero = 0; //count pixels that fall below zero
-        for (int k = 1; k <= (1 + t - window); k++) //Each passing creates one median frame
+    /**
+     * Main calculation loop. Manipulates the data.
+     *
+     * @param data
+     * @param pix
+     * @param T
+     * @param addindex
+     */
+    public void substrmedian(short[] data, int pix, int T, int[] addindex) {
+        int windowC = (window - 1) / 2; //0 indexed sorted array has median at this position.
+        int tempres[] = new int[T-window+1]; //store decompressed medians for subtraction after the loop
+        int step = pix * T;
+        short pixel = 0;
+        short pixel2 = 0;
+        short hist[] = new short[addindex.length]; //Gray-level histogram init at 0
+        short median = 0;//The median of this pixel
+        short aux = 0;   //Marks the position of the median pixel in the column of the histogram, starting with 1
+        for (int t = 0; t <= (T - window); t++) //over all timepoints
         {
-            //statusService.showProgress(k, t);
-            if (k == 1) //Building the first histogram
+            if (t == 0) //Building the first histogram
             {
-                //log.info("calculating first histogram");
-                for (int i = 1; i <= window; i++) //For each frame inside the window
+                for (int t2 = 0; t2 < window; t2++) //For each frame inside the window
                 {
-                    pixels = (short[]) (stack1.getPixels(i + k - 1)); //Save all the pixels of the frame "i+k-1" in "pixels" (starting with 1)
-                    for (int j = 0; j < dimension; j++) //For each pixel in this frame
-                    {
-                        pixels[j] = (short) (pixels[j] - subtract[pixels[j]]); //remove empty values to shorten the histogram
-                        hist[j][pixels[j]]++; //Add it to the histogram
-                    }
+                    hist[data[step + t2]]++; //Add it to the histogram
                 }
-                for (int i = 0; i < dimension; i++) //Calculating the median
+                short count = 0, j = -1;
+                while (count <= windowC) //Counting the histogram, until it reaches the median
                 {
-                    short count = 0, j = -1;
-                    while (count <= windowC) //Counting the histogram, until it reaches the median
-                    {
-                        j++;
-                        count += hist[i][j];
-                    }
-                    aux[i] = (short) (count - (int) windowC); //position in the bin. 1 is lowest.
-                    median[i] = j;
+                    j++;
+                    count += hist[j];
                 }
-                //log.info("done calculating median for first histogram");
+                aux = (short) (count - (int) windowC); //position in the bin. 1 is lowest.
+                median = j;
             } else {
-                pixels = (short[]) (stack1.getPixels(k - 1)); //Old pixels, remove them from the histogram
-                pixels2 = (short[]) (stack1.getPixels(k + window - 1)); //New pixels, add them to the histogram
-                for (int i = 0; i < dimension; i++) //Calculating the new median
+                pixel = data[t + step - 1]; //Old pixel remove from the histogram
+                pixel2 = data[t + window + step-1]; //New pixel, add to the histogram
+                hist[pixel]--; //Removing old pixel
+                hist[pixel2]++; //Adding new pixel
+                if (!(((pixel > median)
+                        && (pixel2 > median))
+                        || ((pixel < median)
+                        && (pixel2 < median))
+                        || ((pixel == median)
+                        && (pixel2 == median)))) //Add and remove the same pixel, or pixel from the same side, the median doesn't change
                 {
-                    //pixels[i] =(short) (pixels[i] - subtract[pixels[i]]); //already subtracted before
-                    pixels2[i] = (short) (pixels2[i] - subtract[pixels2[i]]); //remove empty values to shorten the histogram
-                    hist[i][pixels[i]]--; //Removing old pixel
-                    hist[i][pixels2[i]]++; //Adding new pixel
-                    if (!(((pixels[i] > median[i])
-                            && (pixels2[i] > median[i]))
-                            || ((pixels[i] < median[i])
-                            && (pixels2[i] < median[i]))
-                            || ((pixels[i] == median[i])
-                            && (pixels2[i] == median[i])))) //Add and remove the same pixel, or pixels from the same side, the median doesn't change
+                    int j = median;
+                    if ((pixel2 > median) && (pixel < median)) //The median goes right
                     {
-                        int j = median[i];
-                        if ((pixels2[i] > median[i]) && (pixels[i] < median[i])) //The median goes right
+                        if (hist[median] == aux) //The previous median was the last pixel of its column in the histogram, so it changes
                         {
-                            if (hist[i][median[i]] == aux[i]) //The previous median was the last pixel of its column in the histogram, so it changes
+                            j++;
+                            while (hist[j] == 0) //Searching for the next pixel
                             {
                                 j++;
-                                while (hist[i][j] == 0) //Searching for the next pixel
-                                {
-                                    j++;
-                                }
-                                median[i] = (short) (j);
-                                aux[i] = 1; //The median is the first pixel of its column
-                            } else {
-                                aux[i]++; //The previous median wasn't the last pixel of its column, so it doesn't change, just need to mark its new position
                             }
-                        } else if ((pixels[i] > median[i]) && (pixels2[i] < median[i])) //The median goes left
+                            median = (short) (j);
+                            aux = 1; //The median is the first pixel of its column
+                        } else {
+                            aux++; //The previous median wasn't the last pixel of its column, so it doesn't change, just need to mark its new position
+                        }
+                    } else if ((pixel > median) && (pixel2 < median)) //The median goes left
+                    {
+                        if (aux == 1) //The previous median was the first pixel of its column in the histogram, so it changes
                         {
-                            if (aux[i] == 1) //The previous median was the first pixel of its column in the histogram, so it changes
+                            j--;
+                            while (hist[j] == 0) //Searching for the next pixel
                             {
                                 j--;
-                                while (hist[i][j] == 0) //Searching for the next pixel
-                                {
-                                    j--;
-                                }
-                                median[i] = (short) (j);
-                                aux[i] = hist[i][j]; //The median is the last pixel of its column
-                            } else {
-                                aux[i]--; //The previous median wasn't the first pixel of its column, so it doesn't change, just need to mark its new position
                             }
-                        } else if (pixels2[i] == median[i]) //new pixel = last median
+                            median = (short) (j);
+                            aux = hist[j]; //The median is the last pixel of its column
+                        } else {
+                            aux--; //The previous median wasn't the first pixel of its column, so it doesn't change, just need to mark its new position
+                        }
+                    } else if (pixel2 == median) //new pixel = last median
+                    {
+                        if (pixel < median) //old pixel < last median, the median goes right
                         {
-                            if (pixels[i] < median[i]) //old pixel < last median, the median goes right
-                            {
-                                aux[i]++; //There is at least one pixel above the last median (the one that was just added), so the median doesn't change, just need to mark its new position
-                            }								//else, absolutely nothing changes
-                        } else //pixels[i]==median[i], old pixel = last median
+                            aux++; //There is at least one pixel above the last median (the one that was just added), so the median doesn't change, just need to mark its new position
+                        }								//else, absolutely nothing changes
+                    } else //pixel==median, old pixel = last median
+                    {
+                        if (pixel2 > median) //new pixel > last median, the median goes right
                         {
-                            if (pixels2[i] > median[i]) //new pixel > last median, the median goes right
+                            if (aux == (hist[median] + 1)) //The previous median was the last pixel of its column, so it changes
                             {
-                                if (aux[i] == (hist[i][median[i]] + 1)) //The previous median was the last pixel of its column, so it changes
+                                j++;
+                                while (hist[j] == 0) //Searching for the next pixel
                                 {
                                     j++;
-                                    while (hist[i][j] == 0) //Searching for the next pixel
-                                    {
-                                        j++;
-                                    }
-                                    median[i] = (short) (j);
-                                    aux[i] = 1; //The median is the first pixel of its column
                                 }
-                                //else, absolutely nothing changes
-                            } else //pixels2[i]<median[i], new pixel < last median, the median goes left
+                                median = (short) (j);
+                                aux = 1; //The median is the first pixel of its column
+                            }
+                            //else, absolutely nothing changes
+                        } else //pixel2<median, new pixel < last median, the median goes left
+                        {
+                            if (aux == 1) //The previous median was the first pixel of its column in the histogram, so it changes
                             {
-                                if (aux[i] == 1) //The previous median was the first pixel of its column in the histogram, so it changes
+                                j--;
+                                while (hist[j] == 0) //Searching for the next pixel
                                 {
                                     j--;
-                                    while (hist[i][j] == 0) //Searching for the next pixel
-                                    {
-                                        j--;
-                                    }
-                                    median[i] = (short) (j);
-                                    aux[i] = hist[i][j]; //The median is the last pixel of its column
-                                } else {
-                                    aux[i]--; //The previous median wasn't the first pixel of its column, so it doesn't change, just need to mark its new position
                                 }
+                                median = (short) (j);
+                                aux = hist[j]; //The median is the last pixel of its column
+                            } else {
+                                aux--; //The previous median wasn't the first pixel of its column, so it doesn't change, just need to mark its new position
                             }
                         }
                     }
                 }
             }
-            if (k == 1) { //first median calculation. apply to k=1..window/2
-                //log.info("apply first median");
-                for (int fr = 1; fr <= k + windowC; fr++) {
-                    pixelsnew = (short[]) (stack2.getPixels(fr));
-                    for (int j = 0; j < dimension; j++) {
-                        pixelsnew[j] = (short) (pixelsnew[j] + offset - median[j] - addindex[median[j]]); //
-                        if (pixelsnew[j] < 0) {
-                            pixelsnew[j] = 0;
-                            cntzero++;
-                        }
-                    }
-                }
-                //log.info("Start loop for all other medians");
-            } else { //apply to frame in centre of the medianwindow
-                pixelsnew = (short[]) (stack2.getPixels(k + windowC));
-                for (int j = 0; j < dimension; j++) {
-                    pixelsnew[j] = (short) (pixelsnew[j] + offset - median[j] - addindex[median[j]]); //
-                    if (pixelsnew[j] < 0) {
-                        pixelsnew[j] = 0;
-                        cntzero++;
-                    }
-                }
-            }
-            if ((k % 1000) == 0) {
-                System.gc(); //Calls the Garbage Collector every 1000 frames
+            tempres[t] = addindex[median];
+        }
+        // now decompress data, subtract median and put data back (must be done AFTER median calculation)
+        for (int t = 0; t < T; t++) {
+            if (t <= windowC) {            //Apply first median to frame 0->windowC
+                data[t+step] = (short) (offset+addindex[data[t+step]] - tempres[0]);
+            } else if (t<(T - windowC)) {  //Apply median from windowC back to the current frame 
+                data[t+step] = (short) (offset+addindex[data[t+step]] - tempres[t-windowC]);
+            } else {                      //Apply last median to frame (T-windowC)->T
+                data[t+step] = (short) (offset+addindex[data[t+step]] - tempres[tempres.length-1]);
             }
         }
-        //log.info("apply last median");
-        for (int k = 1 + t - windowC; k <= t; k++) { //apply last medan to remaining frames
-            pixelsnew = (short[]) (stack2.getPixels(k));
-            for (int j = 0; j < dimension; j++) {
-                pixelsnew[j] = (short) (pixelsnew[j] + offset - median[j] - addindex[median[j]]); //
-                if (pixelsnew[j] < 0) {
-                    pixelsnew[j] = 0;
-                    cntzero++;
-                }
-            }
-        }
-        //log.info("finished!");
-        //statusService.showStatus(1, 1, "FINISHED");
-        if (cntzero > 0) {
-            //log.warn(cntzero + "pixels fell below zero , " + (cntzero / t) + " pixels/frame");
-        }
-        return stack2;
     }
 }
