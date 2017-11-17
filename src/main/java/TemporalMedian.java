@@ -41,7 +41,7 @@ import org.scijava.plugin.Plugin;
  * Subtracts the temporal median
  */
 @Plugin(type = Command.class, headless = true,
-        menuPath = "Plugins>Temporal Median")
+        menuPath = "Plugins>Process>Temporal Median Background Subtraction")
 public class TemporalMedian implements Command, Previewable {
 
     @Parameter
