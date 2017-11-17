@@ -85,7 +85,6 @@ public class TemporalMedian implements Command, Previewable {
         int h = stack1.getHeight();
         int t = stack1.getSize();
         int pixels = w * h;
-        statusService.showProgress(0, pixels);
         //sanity check on the input
         if (window % 2 == 0) {
             window++;
@@ -102,7 +101,9 @@ public class TemporalMedian implements Command, Previewable {
         log.debug("finished");
         log.debug("loading data from stack");
         boolean inihist[] = new boolean[65536];
+        statusService.showStatus("loading data");
         for (int i = 0; i < t; i++) { //all timepoints
+            statusService.showProgress(i, t);
             temp = (short[]) stack1.getPixels(i + 1); 
             for (int p = 0; p < pixels; p++) {//all pixels
                 data[i + p * t] = temp[p];
@@ -132,10 +133,13 @@ public class TemporalMedian implements Command, Previewable {
                 }
             }; //end of thread creation
         }
+        statusService.showStatus("calculating");
         startAndJoin(threads);
         //make stack and count zeros
         int zeros = 0;
+        statusService.showStatus("making image");
         for (int i = 0; i < t; i++) { //all timepoints
+            statusService.showProgress(i, t);
             for (int p = 0; p < pixels; p++) { //all pixels
                 temp[p] = data[i + p * t];
                 if (temp[p]<0){zeros++;temp[p]=0;}
