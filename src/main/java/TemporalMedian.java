@@ -3,7 +3,6 @@ In 2017 Rolf Harkes and Bram van den Broek, Netherlands Cancer Institute,
 implemented the T.S.Huang algorithm in a maven .jar for easy deployment in Fiji (ImageJ2)
 The data is read to a single array and each pixel is processed in parallel. 
 The filter is intended for pre-processing of single molecule localization data.
-A dataset of 180x180x25000 pixels was filtered in 15 seconds on a regular PC.
 
 Used articles:
 T.S.Huang et al. 1979 - Original algorithm for median calculation
@@ -133,7 +132,7 @@ public class TemporalMedian implements Command, Previewable {
                 }
             }; //end of thread creation
         }
-        statusService.showStatus("calculating");
+        statusService.showStatus("calculating median");
         startAndJoin(threads);
         //make stack and count zeros
         int zeros = 0;
