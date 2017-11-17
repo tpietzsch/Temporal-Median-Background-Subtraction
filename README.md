@@ -1,22 +1,22 @@
-# Temporal Median filter 
-An adaption of https://github.com/marcelocordeiro/MedianFilter-ImageJ
+# Temporal Median Background Subtraction 
 
-Copyright (c) 2014, Marcelo Augusto Cordeiro, Milstein Lab, University of Toronto.
-This ImageJ plugin was developed for the Milstein Lab at the University of Toronto,
-with the help of Professor Josh Milstein during the summer of 2014, as part of the
-Science Without Borders research opportunity program.
+Copyright (c) 2017 Bram van den Broek and Rolf Harkes, Netherlands Cancer Institute.
+Implementation of the algorithm in a maven .jar for easy deployment in Fiji (ImageJ2). 
 
-Copyright (c) 2017 Bram van den Broek and Rolf Harkes, Dutch Cancer Institute of Amsterdam.
-Implementation of the algorithm in a maven .jar for easy deployment in Fiji (ImageJ2). Adaption is released under GPL V3
-
-Changes:
-* The window is changed from forward to central.
-* The empty bins in the histogram are removed beforehand to reduce memory usage.
+Properties:
+* Uses a central window
+* It uses the first and last median to subtract the starting en ending frames.
+* Parallel computed
 * The possibility to add an offset to the data before median removal to prevent integer overflow.
-* Normalization of data was removed
-* Custom start and finish of filter was removed
 * Automatic correction of even windowsizes
 * Automatic conversion to 16-bit
 
 Used articles:
 T.S.Huang et al. 1979 - Original algorithm for median calculation
+
+
+This software is released under the GPL v3. You may copy, distribute and modify 
+the software as long as you track changes/dates in source files. Any 
+modifications to or software including (via compiler) GPL-licensed code 
+must also be made available under the GPL along with build & install instructions.
+https://www.gnu.org/licenses/gpl-3.0.en.html
