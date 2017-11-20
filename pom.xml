@@ -14,7 +14,7 @@
 
     <groupId>nl.nki-avl</groupId>
     <artifactId>TemporalMedian</artifactId>
-    <version>2.1</version>
+    <version>2.2</version>
 
     <name>Temporal Median Background Subtraction</name>
     <description>This plugin provides a temporal median background subtraction. It was developed for pre-processing of large SMLM datasets.</description>

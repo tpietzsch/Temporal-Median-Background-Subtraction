@@ -85,14 +85,15 @@ public class TemporalMedian implements Command, Previewable {
         int t = stack1.getSize();
         int pixels = w * h;
         //sanity check on the input
-        if (window % 2 == 0) {
+        if (window >= (short) t) {
+            window = (short) t;
+            if (window % 2 == 0) {window--;}
+            log.warn("Window is larger than largest dimension. Reducing window to " + window);
+        } else if (window % 2 == 0) {
             window++;
             log.warn("No support for even windows. Window = " + window);
         }
-        if (window >= (short) t) {
-            window = (short) t;
-            log.warn("Window is larger than largest dimension. Reducing window to " + window);
-        }
+        
         //allocate data storage
         log.debug("allocating datastorage");
         short data[] = new short[t * pixels];
@@ -101,9 +102,10 @@ public class TemporalMedian implements Command, Previewable {
         log.debug("loading data from stack");
         boolean inihist[] = new boolean[65536];
         statusService.showStatus("loading data");
+        Object[] imagearray = stack1.getImageArray();
         for (int i = 0; i < t; i++) { //all timepoints
             statusService.showProgress(i, t);
-            temp = (short[]) stack1.getPixels(i + 1); 
+            temp = (short[]) imagearray[i]; 
             for (int p = 0; p < pixels; p++) {//all pixels
                 data[i + p * t] = temp[p];
                 inihist[temp[p]] = true;
