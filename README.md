@@ -12,7 +12,7 @@ Properties:
 * Automatic conversion to 16-bit
 
 Used articles:
-T.S.Huang et al. 1979 - Original algorithm for median calculation
+Thomas S. Huang et al. 1979 - A Fast Two-Dimensional Median Filtering Algorithm
 
 
 This software is released under the GPL v3. You may copy, distribute and modify 
