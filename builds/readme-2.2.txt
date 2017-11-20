@@ -1,4 +1,4 @@
-TemporalMedian 2.0
+TemporalMedian 2.2
 
 The plugin can be tested using the following macro commands:
 
