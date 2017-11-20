@@ -5,7 +5,7 @@ Implementation of the algorithm in a maven .jar for easy deployment in Fiji (Ima
 
 Properties:
 * Uses a central window
-* It uses the first and last median to subtract the starting en ending frames.
+* It uses the first and last median to subtract the starting and ending frames.
 * Parallel computed
 * The possibility to add an offset to the data before median removal to prevent integer overflow.
 * Automatic correction of even windowsizes
