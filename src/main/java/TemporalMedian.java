@@ -93,7 +93,9 @@ public class TemporalMedian implements Command, Previewable {
             window++;
             log.warn("No support for even windows. Window = " + window);
         }
-        
+        if (((long) t * (long) pixels)>(2^32)){
+            log.error("No support for more than 4.294.967.296 pixels. Please concider making substacks.");
+        }
         //allocate data storage
         log.debug("allocating datastorage");
         short data[] = new short[t * pixels];
