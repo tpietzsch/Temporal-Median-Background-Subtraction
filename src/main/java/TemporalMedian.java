@@ -4,7 +4,7 @@ Based on the Fast Temporal Median Filter for ImageJ by the Milstein Lab.
 It implementes the T.S.Huang algorithm in a maven .jar for easy deployment in Fiji (ImageJ2)
 Calculating the median from the ranked data, and processing each pixel in parallel. 
 The filter is intended for pre-processing of single molecule localization data.
-v2.2.1
+v2.3
 
 Used articles:
 T.S.Huang et al. 1979 - Original algorithm for median calculation
@@ -23,13 +23,15 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
  */
+import static java.lang.Runtime.getRuntime;
+import static java.lang.System.arraycopy;
+import static java.lang.Thread.NORM_PRIORITY;
+import net.imglib2.RandomAccess;
+import net.imglib2.RandomAccessibleInterval;
 
-import ij.IJ;
-import ij.ImagePlus;
-import ij.ImageStack;
-import ij.process.ImageConverter;
-import ij.process.StackConverter;
-import java.util.concurrent.atomic.AtomicInteger;
+import net.imglib2.img.Img;
+import net.imglib2.type.numeric.integer.UnsignedShortType;
+import net.imglib2.view.Views;
 
 import org.scijava.app.StatusService;
 import org.scijava.command.Command;
@@ -52,7 +54,8 @@ public class TemporalMedian implements Command, Previewable {
     private StatusService statusService;
 
     @Parameter(label = "Select image", description = "the image field")
-    private ImagePlus image1;
+    private Img<UnsignedShortType> img;
+    //would be nice to allow any integer type in the future.
 
     @Parameter(label = "Median window", description = "the frames for medan")
     private short window;
@@ -60,104 +63,45 @@ public class TemporalMedian implements Command, Previewable {
     @Parameter(label = "Added offset", description = "offset added to the new image")
     private short offset;
 
-    //@Parameter(label = "Ignore this", description = "Do not use this field", visibility = ItemVisibility.INVISIBLE)
-    //private ImagePlus IGNOREimage; //never used, need for getting a list selection for image1
     public static void main(final String... args) throws Exception {
 
     }
 
     @Override
     public void run() {
-        double bitdepth = (double) image1.getBitDepth(); //declare double for raising to power
-        if (bitdepth != 16) {
-            log.warn("BitDepth must 16 but was " + image1.getBitDepth() + ". Will convert now");
-            if (ImageConverter.getDoScaling()) {
-                ImageConverter.setDoScaling(false);
-                new StackConverter(image1).convertToGray16();
-                ImageConverter.setDoScaling(true);
-            } else {
-                new StackConverter(image1).convertToGray16();
-            }
-        }
-        //get datastack
-        image1.deleteRoi(); //remove to prevent a partial duplicate
-        ImageStack stack1 = image1.getStack();
-        int w = stack1.getWidth();
-        int h = stack1.getHeight();
-        int t = stack1.getSize();
-        int pixels = w * h;
+        final long[] dims = new long[img.numDimensions()];
+        img.dimensions(dims);
+        long pixels = dims[0] * dims[1];
         //sanity check on the input
-        if (window >= (short) t) {
-            window = (short) t;
+        if (window >= dims[2]) {
+            window = (short) dims[2];
             if (window % 2 == 0) {window--;}
             log.warn("Window is larger than largest dimension. Reducing window to " + window);
         } else if (window % 2 == 0) {
             window++;
             log.warn("No support for even windows. Window = " + window);
         }
-        if (((long) t * (long) pixels)>(2^32)){
+        if ((dims[0] * dims[1]* dims[2])>pow(2,32)){
             log.error("No support for more than 4.294.967.296 pixels. Please concider splitting the image.");return;
         }
-        //allocate data storage
-        log.debug("allocating datastorage");
-        short data[] = new short[t * pixels];
-        short temp[] = new short[pixels];
-        log.debug("finished");
-        log.debug("loading data from stack");
-        boolean inihist[] = new boolean[65536];
-        statusService.showStatus("loading data");
-        Object[] imagearray = stack1.getImageArray();
-        for (int i = 0; i < t; i++) { //all timepoints
-            statusService.showProgress(i, t);
-            temp = (short[]) imagearray[i]; 
-            for (int p = 0; p < pixels; p++) {//all pixels
-                data[i + p * t] = temp[p];
-                inihist[temp[p]] = true;
+        int unrankArray[] = denseRank(img);
+        //do calculation  per pixel
+        long[] dimensionsROI = {1, 1, dims[2]};
+        for (int i = 0; i < pixels; i++) { 
+            long x = 2+(i % dims[0]);
+            long y = 2+(i/dims[0]);
+            log.info("pixel x = "+x);
+            log.info("pixel y = "+y);
+            long[] startPointROI = {x, y, 0};
+            RandomAccessibleInterval<UnsignedShortType> myROI = Views.offsetInterval(img, startPointROI, dimensionsROI);
+            substrmedian(myROI, dims[2], window,offset,unrankArray);
+            if ((i%200)==0){
+                statusService.showProgress(i, (int) pixels);
             }
         }
-        log.debug("finished");
-        log.debug("compress data");
-        //compress data
-        int addindex[] = compress(data, inihist);
-        log.debug("finished");
-        //do calculation in parallel per pixel
-        final AtomicInteger ai = new AtomicInteger(0); //special unqique int for each thread
-        final Thread[] threads = newThreadArray(); //all threads
-        for (int ithread = 0; ithread < threads.length; ithread++) {
-            threads[ithread] = new Thread() { //make threads
-                {
-                    setPriority(Thread.NORM_PRIORITY);
-                }
-                public void run() {
-                    for (int i = ai.getAndIncrement(); i < pixels; i = ai.getAndIncrement()) { //get unique i
-                        substrmedian(data, i, t, addindex,window,offset);
-                        if ((i%200)==0){
-                            statusService.showProgress(i, pixels);
-                        }
-                    }
-                }
-            }; //end of thread creation
-        }
-        statusService.showStatus("calculating median");
-        startAndJoin(threads);
-        //make stack and count zeros
-        int zeros = 0;
-        statusService.showStatus("making image");
-        for (int i = 0; i < t; i++) { //all timepoints
-            statusService.showProgress(i, t);
-            for (int p = 0; p < pixels; p++) { //all pixels
-                temp[p] = data[i + p * t];
-                if (temp[p]<0){zeros++;temp[p]=0;}
-            }
-            stack1.setPixels(temp.clone(), (i+1));
-        }
-        if (zeros>0&&(zeros/t)<10){log.info(zeros + " pixels went below zero. Concider increasing the offset." + (zeros/t) + " pixels per frame.");}
-        if ((zeros/t)>=10){log.warn(zeros + " pixels went below zero. Concider increasing the offset." + (zeros/t) + " pixels per frame.");}
-        image1.setStack(stack1);
-        image1.setTitle("MEDFILT_" + image1.getTitle());
-        image1.setDisplayMode(IJ.GRAYSCALE);
-        image1.show();
+        //check for zeros to warn for underflow
         statusService.showStatus(1, 1, "FINISHED");
+        //refresh imagej
     }
 
     @Override
@@ -172,13 +116,13 @@ public class TemporalMedian implements Command, Previewable {
 
     //two methods for concurrent calculation
     private Thread[] newThreadArray() {
-        int n_cpus = Runtime.getRuntime().availableProcessors();
+        int n_cpus = getRuntime().availableProcessors();
         return new Thread[n_cpus];
     }
 
     public static void startAndJoin(Thread[] threads) {
         for (int ithread = 0; ithread < threads.length; ++ithread) {
-            threads[ithread].setPriority(Thread.NORM_PRIORITY);
+            threads[ithread].setPriority(NORM_PRIORITY);
             threads[ithread].start();
         }
         try {
@@ -191,39 +135,44 @@ public class TemporalMedian implements Command, Previewable {
     }
 
     /**
-     * Dense ranking of the input array. 
+     * Dense ranking of the input image. 
      * It returns a decompression array to go from rank to value that has the 
-     * length of the total number of unique values
+     * length of the total number of unique values.
      * Example: [0 5 6 5 10 6] becomes [0 1 2 1 3 2]
      *          The decompression array is [0 5 6 10] 
+     * @param img
      * @see <a href = "https://en.wikipedia.org/wiki/Ranking#Dense_ranking_(%221223%22_ranking)">Dense ranking</a>
-     * @param data    uint16 array with values that will be ranked
-     * @param inihist boolean array of length 65536 that is true if the value exists
      * @return        decompression array that can reverse the compression step
      */
-    public static int[] compress(short[] data, boolean[] inihist) {
+    public int[] denseRank(Img< UnsignedShortType > img) {
         int values = (int) 65536;
+        boolean[] doesValueExist = new boolean[values];
+        //go over all pixels to see what values exist
+        for( UnsignedShortType t : img ){
+            doesValueExist[t.get()]=true;
+        }
+        //create the unrank array and subtract array. 
         int subtract[] = new int[values];
-        int decompressF[] = new int[values]; //decompress array decompress[data] --> original data
+        int unrankArrayFull[] = new int[values]; //unrank array unrankArray[data] --> original data
         int idx = 0;
         int subtractvalue = 0;
         for (int i = 0; i < values; i++) {
-            if (inihist[i]) {
+            if (doesValueExist[i]) {
                 subtract[i] = subtractvalue;
-                decompressF[idx] = subtractvalue + idx;
+                unrankArrayFull[idx] = subtractvalue + idx;
                 idx++;
             } else {
                 subtractvalue++;
             }
         }
-        //trim the decompress array
-        int decompress[] = new int[idx];
-        System.arraycopy(decompressF, 0, decompress, 0, idx);
-        //compress data
-        for (int i = 0; i < data.length; i++) {
-            data[i] -= subtract[data[i]];
+        //trim the unranking array
+        int unrankArray[] = new int[idx];
+        arraycopy(unrankArrayFull, 0, unrankArray, 0, idx);
+        //rank data
+        for ( UnsignedShortType t : img ) {
+            t.set(t.get()-subtract[t.get()]);
         }
-        return decompress;
+        return unrankArray;
     }
 
     /**
@@ -231,29 +180,28 @@ public class TemporalMedian implements Command, Previewable {
      * Will change the input variable data.
      * Data is layout as t0x0y0, t1x0y0, t2x0y0 etc.
      *
-     * @param data     ranked data with values from 0 to addindex.length
-     * @param pix      pixel to analyse
-     * @param T        number of timepoints
-     * @param addindex decompression array to go from ranked to original data
-     * @param window   temporal window (must be odd)
-     * @param offset   added to the each pixel before subtraction to prevent underflow
+     * @param rai         random access interval set to the pixel over entire time
+     * @param T           nr of timepoints
+     * @param window      temporal window (must be odd)
+     * @param offset      added to the each pixel before subtraction to prevent underflow
+     * @param unrankArray to convert rank values back to pixel values
      */
-    public void substrmedian(short[] data, int pix, int T, int[] addindex, short window, short offset) {
+    public void substrmedian(RandomAccessibleInterval< UnsignedShortType > rai,long T, short window, short offset,int[] unrankArray) {
+        RandomAccess<UnsignedShortType> r = rai.randomAccess();
         int windowC = (window - 1) / 2; //0 indexed sorted array has median at this position.
-        int tempres[] = new int[T-window+1]; //store decompressed medians for subtraction after the loop
-        int step = pix * T;
+        int MedVals[] = new int[(int)T-window+1]; //store decompressed medians for subtraction after the loop
         short pixel;
         short pixel2;
-        short hist[] = new short[addindex.length]; //Gray-level histogram init at 0
+        short hist[] = new short[unrankArray.length]; //Gray-level histogram init at 0
         short median = 0;//The median of this pixel
         short aux = 0;   //Marks the position of the median pixel in the column of the histogram, starting with 1
-        for (int t = 0; t <= (T - window); t++) //over all timepoints
-        {
+        for (int t = 0; t <= (T - window); t++) { //over all timepoints
             if (t == 0) //Building the first histogram
             {
                 for (int t2 = 0; t2 < window; t2++) //For each frame inside the window
                 {
-                    hist[data[step + t2]]++; //Add it to the histogram
+                    r.setPosition(t2, 2);
+                    hist[r.get().getInteger()]++; //Add it to the histogram
                 }
                 short count = 0, j = -1;
                 while (count <= windowC) //Counting the histogram, until it reaches the median
@@ -264,8 +212,10 @@ public class TemporalMedian implements Command, Previewable {
                 aux = (short) (count - (int) windowC); //position in the bin. 1 is lowest.
                 median = j;
             } else {
-                pixel = data[t + step - 1]; //Old pixel remove from the histogram
-                pixel2 = data[t + window + step-1]; //New pixel, add to the histogram
+                r.setPosition(t-1, 2);
+                pixel = (short) r.get().getInteger(); //Old pixel remove from the histogram
+                r.setPosition(t+window-1, 2);
+                pixel2 = (short) r.get().getInteger(); //New pixel, add to the histogram
                 hist[pixel]--; //Removing old pixel
                 hist[pixel2]++; //Adding new pixel
                 if (!(((pixel > median)
@@ -343,18 +293,37 @@ public class TemporalMedian implements Command, Previewable {
                     }
                 }
             }
-            tempres[t] = addindex[median];
+            MedVals[t] = unrankArray[median];
         }
+        log.info("unrankArray[0] = "+unrankArray[0]);
+        log.info("unrankArray[1] = "+unrankArray[1]);
+        log.info("unrankArray[end-1] = "+unrankArray[unrankArray.length-2]);
+        log.info("unrankArray[end] = "+unrankArray[unrankArray.length-1]);
+        log.info("MedVals[0] = "+MedVals[0]);
+        log.info("MedVals[1] = "+MedVals[1]);
+        log.info("MedVals[end-1] = "+MedVals[MedVals.length-2]);
+        log.info("MedVals[end] = "+MedVals[MedVals.length-1]);
         // now convert this pixel back from rank to original data and subtract the median
         // this must be done AFTER median calculation. Otherwise we mix rank and original.
         for (int t = 0; t < T; t++) {
+            r.setPosition(t, 2);
+            final UnsignedShortType currPix = r.get();
             if (t <= windowC) {            //Apply first median to frame 0->windowC
-                data[t+step] = (short) (offset+addindex[data[t+step]] - tempres[0]);
+                currPix.set( (short) (offset + unrankArray[currPix.getInteger()] - MedVals[0]));
             } else if (t<(T - windowC)) {  //Apply median from windowC back to the current frame 
-                data[t+step] = (short) (offset+addindex[data[t+step]] - tempres[t-windowC]);
-            } else {                      //Apply last median to frame (T-windowC)->T
-                data[t+step] = (short) (offset+addindex[data[t+step]] - tempres[tempres.length-1]);
+                currPix.set( (short) (offset + unrankArray[currPix.getInteger()] - MedVals[t-windowC]));
+            } else {                       //Apply last median to frame (T-windowC)->T
+                
+                currPix.set( (short) (offset + unrankArray[currPix.getInteger()] - MedVals[MedVals.length-1]));
             }
         }
+    }
+    long pow (long a, int b)
+    {
+        if ( b == 0)        return 1;
+        if ( b == 1)        return a;
+        if ((b%2)==0)       return     pow ( a * a, b/2); //even a=(a^2)^b/2
+        else                return a * pow ( a * a, b/2); //odd  a=a*(a^2)^b/2
+
     }
 }
