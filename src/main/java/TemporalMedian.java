@@ -1,8 +1,10 @@
 /* Fast Temporal Median filter 
-In 2017 Rolf Harkes and Bram van den Broek, Netherlands Cancer Institute, 
-implemented the T.S.Huang algorithm in a maven .jar for easy deployment in Fiji (ImageJ2)
-The data is read to a single array and each pixel is processed in parallel. 
+(c) 2017 Rolf Harkes and Bram van den Broek, Netherlands Cancer Institute.
+Based on the Fast Temporal Median Filter for ImageJ by the Milstein Lab.
+It implementes the T.S.Huang algorithm in a maven .jar for easy deployment in Fiji (ImageJ2)
+Calculating the median from the ranked data, and processing each pixel in parallel. 
 The filter is intended for pre-processing of single molecule localization data.
+v2.2.1
 
 Used articles:
 T.S.Huang et al. 1979 - Original algorithm for median calculation
@@ -94,7 +96,7 @@ public class TemporalMedian implements Command, Previewable {
             log.warn("No support for even windows. Window = " + window);
         }
         if (((long) t * (long) pixels)>(2^32)){
-            log.error("No support for more than 4.294.967.296 pixels. Please concider making substacks.");return;
+            log.error("No support for more than 4.294.967.296 pixels. Please concider splitting the image.");return;
         }
         //allocate data storage
         log.debug("allocating datastorage");
@@ -128,7 +130,7 @@ public class TemporalMedian implements Command, Previewable {
                 }
                 public void run() {
                     for (int i = ai.getAndIncrement(); i < pixels; i = ai.getAndIncrement()) { //get unique i
-                        substrmedian(data, i, t, addindex);
+                        substrmedian(data, i, t, addindex,window,offset);
                         if ((i%200)==0){
                             statusService.showProgress(i, pixels);
                         }
@@ -188,6 +190,17 @@ public class TemporalMedian implements Command, Previewable {
         }
     }
 
+    /**
+     * Dense ranking of the input array. 
+     * It returns a decompression array to go from rank to value that has the 
+     * length of the total number of unique values
+     * Example: [0 5 6 5 10 6] becomes [0 1 2 1 3 2]
+     *          The decompression array is [0 5 6 10] 
+     * @see <a href = "https://en.wikipedia.org/wiki/Ranking#Dense_ranking_(%221223%22_ranking)">Dense ranking</a>
+     * @param data    uint16 array with values that will be ranked
+     * @param inihist boolean array of length 65536 that is true if the value exists
+     * @return        decompression array that can reverse the compression step
+     */
     public static int[] compress(short[] data, boolean[] inihist) {
         int values = (int) 65536;
         int subtract[] = new int[values];
@@ -214,19 +227,23 @@ public class TemporalMedian implements Command, Previewable {
     }
 
     /**
-     * Main calculation loop. Manipulates the data.
+     * Subtract the temporal median from the ranked data.
+     * Will change the input variable data.
+     * Data is layout as t0x0y0, t1x0y0, t2x0y0 etc.
      *
-     * @param data
-     * @param pix
-     * @param T
-     * @param addindex
+     * @param data     ranked data with values from 0 to addindex.length
+     * @param pix      pixel to analyse
+     * @param T        number of timepoints
+     * @param addindex decompression array to go from ranked to original data
+     * @param window   temporal window (must be odd)
+     * @param offset   added to the each pixel before subtraction to prevent underflow
      */
-    public void substrmedian(short[] data, int pix, int T, int[] addindex) {
+    public void substrmedian(short[] data, int pix, int T, int[] addindex, short window, short offset) {
         int windowC = (window - 1) / 2; //0 indexed sorted array has median at this position.
         int tempres[] = new int[T-window+1]; //store decompressed medians for subtraction after the loop
         int step = pix * T;
-        short pixel = 0;
-        short pixel2 = 0;
+        short pixel;
+        short pixel2;
         short hist[] = new short[addindex.length]; //Gray-level histogram init at 0
         short median = 0;//The median of this pixel
         short aux = 0;   //Marks the position of the median pixel in the column of the histogram, starting with 1
@@ -328,7 +345,8 @@ public class TemporalMedian implements Command, Previewable {
             }
             tempres[t] = addindex[median];
         }
-        // now decompress data, subtract median and put data back (must be done AFTER median calculation)
+        // now convert this pixel back from rank to original data and subtract the median
+        // this must be done AFTER median calculation. Otherwise we mix rank and original.
         for (int t = 0; t < T; t++) {
             if (t <= windowC) {            //Apply first median to frame 0->windowC
                 data[t+step] = (short) (offset+addindex[data[t+step]] - tempres[0]);

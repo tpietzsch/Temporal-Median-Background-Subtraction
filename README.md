@@ -4,6 +4,7 @@ Copyright (c) 2017 Bram van den Broek and Rolf Harkes, Netherlands Cancer Instit
 Implementation of the algorithm in a maven .jar for easy deployment in Fiji (ImageJ2). 
 
 Properties:
+* Calculates the median from the ranked data
 * Uses a central window
 * It uses the first and last median to subtract the starting and ending frames.
 * Parallel computed
