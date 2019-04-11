@@ -148,7 +148,7 @@ public class TemporalMedian implements Command, Previewable {
         int values = (int) 65536;
         boolean[] doesValueExist = new boolean[values];
         //go over all pixels to see what values exist
-        for( UnsignedShortType t : img ){
+        for( UnsignedShortType t : img ){ //the Cursor is hidden here, we do not need to request locations
             doesValueExist[t.get()]=true;
         }
         //create the unrank array and subtract array. 
