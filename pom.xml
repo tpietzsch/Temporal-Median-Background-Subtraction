@@ -8,13 +8,13 @@
     <parent>
         <groupId>org.scijava</groupId>
         <artifactId>pom-scijava</artifactId>
-        <version>16.1.0</version>
+        <version>25.0.0</version>
         <relativePath />
     </parent>
 
     <groupId>nl.nki-avl</groupId>
     <artifactId>TemporalMedian</artifactId>
-    <version>2.2.1</version>
+    <version>3.0.0</version>
 
     <name>Temporal Median Background Subtraction</name>
     <description>This plugin provides a temporal median background subtraction. It was developed for pre-processing of large SMLM datasets.</description>
