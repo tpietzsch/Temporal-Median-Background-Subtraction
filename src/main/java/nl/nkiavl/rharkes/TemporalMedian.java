@@ -1,3 +1,4 @@
+package nl.nkiavl.rharkes;
 /* Fast Temporal Median filter 
 (c) 2017 Rolf Harkes and Bram van den Broek, Netherlands Cancer Institute.
 Based on the Fast Temporal Median Filter for ImageJ by the Milstein Lab.
@@ -24,11 +25,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
  */
 
-import ij.IJ;
-import ij.ImagePlus;
-import ij.ImageStack;
-import ij.process.ImageConverter;
-import ij.process.StackConverter;
+import net.imglib2.Cursor;
+import net.imglib2.img.Img;
+import net.imglib2.type.numeric.integer.UnsignedShortType;
+
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.scijava.app.StatusService;
@@ -52,7 +52,7 @@ public class TemporalMedian implements Command, Previewable {
     private StatusService statusService;
 
     @Parameter(label = "Select image", description = "the image field")
-    private ImagePlus image1;
+    private Img<UnsignedShortType> img;
 
     @Parameter(label = "Median window", description = "the frames for medan")
     private short window;
@@ -68,57 +68,48 @@ public class TemporalMedian implements Command, Previewable {
 
     @Override
     public void run() {
-        double bitdepth = (double) image1.getBitDepth(); //declare double for raising to power
+    	UnsignedShortType tempPixel = img.firstElement();
+        double bitdepth = (double) tempPixel.getBitsPerPixel(); //declare double for raising to power
         if (bitdepth != 16) {
-            log.warn("BitDepth must 16 but was " + image1.getBitDepth() + ". Will convert now");
-            if (ImageConverter.getDoScaling()) {
-                ImageConverter.setDoScaling(false);
-                new StackConverter(image1).convertToGray16();
-                ImageConverter.setDoScaling(true);
-            } else {
-                new StackConverter(image1).convertToGray16();
-            }
+            log.error("BitDepth must 16 but was " + tempPixel.getBitsPerPixel());
         }
+        final long[] dims = new long[img.numDimensions()];
+		img.dimensions(dims);
+		long pixels = dims[0] * dims[1];
         //get datastack
-        image1.deleteRoi(); //remove to prevent a partial duplicate
-        ImageStack stack1 = image1.getStack();
-        int w = stack1.getWidth();
-        int h = stack1.getHeight();
-        int t = stack1.getSize();
-        int pixels = w * h;
         //sanity check on the input
-        if (window >= (short) t) {
-            window = (short) t;
+        if (window >= (short) dims[2]) {
+            window = (short) dims[2];
             if (window % 2 == 0) {window--;}
             log.warn("Window is larger than largest dimension. Reducing window to " + window);
         } else if (window % 2 == 0) {
             window++;
             log.warn("No support for even windows. Window = " + window);
         }
-        if (((long) t * (long) pixels)>(2^32)){
-            log.error("No support for more than 4.294.967.296 pixels. Please concider splitting the image.");return;
+        if (((long) dims[2] * pixels)>(Math.pow(2,32))){
+            log.error("No support for more than 4.294.967.296 pixels. Please consider splitting the image.");return;
         }
         //allocate data storage
         log.debug("allocating datastorage");
-        short data[] = new short[t * pixels];
-        short temp[] = new short[pixels];
+        short data[] = new short[(int)(dims[2] * pixels)];
+        short temp;
         log.debug("finished");
         log.debug("loading data from stack");
-        boolean inihist[] = new boolean[65536];
+        boolean doesValueExist[] = new boolean[65536];
         statusService.showStatus("loading data");
-        Object[] imagearray = stack1.getImageArray();
-        for (int i = 0; i < t; i++) { //all timepoints
-            statusService.showProgress(i, t);
-            temp = (short[]) imagearray[i]; 
-            for (int p = 0; p < pixels; p++) {//all pixels
-                data[i + p * t] = temp[p];
-                inihist[temp[p]] = true;
-            }
+        Cursor<UnsignedShortType> cursor = img.cursor();
+        final long[] pos = new long[3];
+        while (cursor.hasNext()) {
+        	cursor.fwd();
+        	cursor.localize(pos);
+        	temp = (short) cursor.get().getInteger();
+        	data[(int)(pos[2]+pos[1]*dims[2]+pos[0]*dims[2]*dims[1])]=temp;
+        	doesValueExist[temp]=true;
         }
         log.debug("finished");
         log.debug("compress data");
         //compress data
-        int addindex[] = compress(data, inihist);
+        int addindex[] = denseRank(data, doesValueExist);
         log.debug("finished");
         //do calculation in parallel per pixel
         final AtomicInteger ai = new AtomicInteger(0); //special unqique int for each thread
@@ -130,9 +121,9 @@ public class TemporalMedian implements Command, Previewable {
                 }
                 public void run() {
                     for (int i = ai.getAndIncrement(); i < pixels; i = ai.getAndIncrement()) { //get unique i
-                        substrmedian(data, i, t, addindex,window,offset);
+                        substrmedian(data, i, (int) dims[2], addindex,window,offset);
                         if ((i%200)==0){
-                            statusService.showProgress(i, pixels);
+                            statusService.showProgress(i, (int) pixels);
                         }
                     }
                 }
@@ -143,20 +134,16 @@ public class TemporalMedian implements Command, Previewable {
         //make stack and count zeros
         int zeros = 0;
         statusService.showStatus("making image");
-        for (int i = 0; i < t; i++) { //all timepoints
-            statusService.showProgress(i, t);
-            for (int p = 0; p < pixels; p++) { //all pixels
-                temp[p] = data[i + p * t];
-                if (temp[p]<0){zeros++;temp[p]=0;}
-            }
-            stack1.setPixels(temp.clone(), (i+1));
+        cursor.reset();
+        while (cursor.hasNext()) {
+        	cursor.fwd();
+        	cursor.localize(pos);
+        	temp = data[(int)(pos[2]+pos[1]*dims[2]+pos[0]*dims[2]*dims[1])];
+        	if (temp<0){zeros++;temp=0;}
+        	cursor.get().setInteger(temp);
         }
-        if (zeros>0&&(zeros/t)<10){log.info(zeros + " pixels went below zero. Concider increasing the offset." + (zeros/t) + " pixels per frame.");}
-        if ((zeros/t)>=10){log.warn(zeros + " pixels went below zero. Concider increasing the offset." + (zeros/t) + " pixels per frame.");}
-        image1.setStack(stack1);
-        image1.setTitle("MEDFILT_" + image1.getTitle());
-        image1.setDisplayMode(IJ.GRAYSCALE);
-        image1.show();
+        if (zeros>0&&(zeros/dims[2])<10){log.info(zeros + " pixels went below zero. Concider increasing the offset." + (zeros/dims[2]) + " pixels per frame.");}
+        if ((zeros/dims[2])>=10){log.warn(zeros + " pixels went below zero. Concider increasing the offset." + (zeros/dims[2]) + " pixels per frame.");}
         statusService.showStatus(1, 1, "FINISHED");
     }
 
@@ -201,29 +188,29 @@ public class TemporalMedian implements Command, Previewable {
      * @param inihist boolean array of length 65536 that is true if the value exists
      * @return        decompression array that can reverse the compression step
      */
-    public static int[] compress(short[] data, boolean[] inihist) {
+    public static int[] denseRank(short[] data, boolean[] doesValueExist) {
         int values = (int) 65536;
         int subtract[] = new int[values];
-        int decompressF[] = new int[values]; //decompress array decompress[data] --> original data
+        int unrankArrayF[] = new int[values]; //decompress array decompress[data] --> original data
         int idx = 0;
         int subtractvalue = 0;
         for (int i = 0; i < values; i++) {
-            if (inihist[i]) {
+            if (doesValueExist[i]) {
                 subtract[i] = subtractvalue;
-                decompressF[idx] = subtractvalue + idx;
+                unrankArrayF[idx] = subtractvalue + idx;
                 idx++;
             } else {
                 subtractvalue++;
             }
         }
-        //trim the decompress array
-        int decompress[] = new int[idx];
-        System.arraycopy(decompressF, 0, decompress, 0, idx);
+        //trim the unrank array
+        int unrankArray[] = new int[idx];
+        System.arraycopy(unrankArrayF, 0, unrankArray, 0, idx);
         //compress data
         for (int i = 0; i < data.length; i++) {
             data[i] -= subtract[data[i]];
         }
-        return decompress;
+        return unrankArray;
     }
 
     /**
