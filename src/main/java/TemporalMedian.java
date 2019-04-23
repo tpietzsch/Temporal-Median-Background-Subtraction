@@ -69,8 +69,7 @@ public class TemporalMedian implements Command, Previewable {
 
     @Override
     public void run() {
-    	IntegerType<UnsignedShortType> temp = img.firstElement();
-    	values = 1 << temp.getBitsPerPixel();
+    	values = 65536;
         final long[] dims = new long[img.numDimensions()];
         img.dimensions(dims);
         long pixels = dims[0] * dims[1];
@@ -83,10 +82,8 @@ public class TemporalMedian implements Command, Previewable {
             window++;
             log.warn("No support for even windows. Window = " + window);
         }
-        if ((dims[0] * dims[1]* dims[2])>pow(2,32)){
-            log.error("No support for more than 4.294.967.296 pixels. Please concider splitting the image.");return;
-        }
-        int unrankArray[] = denseRank(img);
+        
+        int unrankArray[] = denseRank(img,values);
         //do calculation in parallel per pixel
         final AtomicInteger ai = new AtomicInteger(0); //special unqique int for each thread
         final Thread[] threads = newThreadArray(); //all threads
@@ -152,20 +149,20 @@ public class TemporalMedian implements Command, Previewable {
      * @return integer array to convert the ranked image back
      * @see <a href = "https://en.wikipedia.org/wiki/Ranking#Dense_ranking_(%221223%22_ranking)">Dense ranking</a>
      * */ 
-     public int[] denseRank(Img< UnsignedShortType > img) {
+     public int[] denseRank(Img< UnsignedShortType > img, int values) {
      	boolean[] doesValueExist = new boolean[values];
          //go over all pixels to see what values exist
-     	statusService.showStatus("ranking image (1/3)...");
+     	if (statusService != null) {statusService.showStatus("ranking image (1/3)...");}
          for (Iterator<UnsignedShortType> iterator = img.iterator(); iterator.hasNext();) {
  			IntegerType<UnsignedShortType> t = iterator.next();
  			doesValueExist[t.getInteger()]=true;
  		}
          //create the unrank array and subtract array. 
          int subtract[] = new int[values];
-         int unrankArrayFull[] = new int[values]; //unrank array unrankArray[data] --> original data
+         int unrankArrayFull[] = new int[values]; //unrank array unrankArray[data] --> original data (int, since short cannot handle >2^15)
          int idx = 0;
          int subtractvalue = 0;
-     	statusService.showStatus("ranking image (2/3)...");
+         if (statusService != null) {statusService.showStatus("ranking image (2/3)...");}
          for (int i = 0; i < values; i++) {
              if (doesValueExist[i]) {
                  subtract[i] = subtractvalue;
@@ -179,12 +176,12 @@ public class TemporalMedian implements Command, Previewable {
          int unrankArray[] = new int[idx];
          arraycopy(unrankArrayFull, 0, unrankArray, 0, idx);
          //rank data
-     	statusService.showStatus("ranking image (3/3)...");
+         if (statusService != null) {statusService.showStatus("ranking image (3/3)...");}
          for (Iterator<UnsignedShortType> iterator = img.iterator(); iterator.hasNext();) {
  			IntegerType<UnsignedShortType> t = iterator.next();
  			t.setInteger(t.getInteger()-subtract[t.getInteger()]);
  		}
-         statusService.showStatus("Finished!");
+         if (statusService != null) {statusService.showStatus("Finished!");}
          return unrankArray;
      }
 
