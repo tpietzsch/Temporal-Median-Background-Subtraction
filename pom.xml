@@ -12,7 +12,7 @@
         <relativePath />
     </parent>
 
-    <groupId>nl.nki-avl</groupId>
+    <groupId>nl.nkiavl.rharkes</groupId>
     <artifactId>TemporalMedian</artifactId>
     <version>3.0.0</version>
 

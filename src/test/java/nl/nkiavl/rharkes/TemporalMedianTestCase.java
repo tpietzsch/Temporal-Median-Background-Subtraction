@@ -1,3 +1,4 @@
+package nl.nkiavl.rharkes;
 import static org.junit.Assert.*;
 import org.junit.Test;
 
@@ -6,6 +7,7 @@ import net.imglib2.Cursor;
 import net.imglib2.img.Img;
 import net.imglib2.img.array.ArrayImgFactory;
 import net.imglib2.type.numeric.integer.UnsignedShortType;
+import nl.nkiavl.rharkes.TemporalMedian;
 
 public class TemporalMedianTestCase {
 	TemporalMedian TM = new TemporalMedian(); 

@@ -1,3 +1,4 @@
+package nl.nkiavl.rharkes;
 /* Fast Temporal Median filter 
 (c) 2017 Rolf Harkes and Bram van den Broek, Netherlands Cancer Institute.
 Based on the Fast Temporal Median Filter for ImageJ by the Milstein Lab.
