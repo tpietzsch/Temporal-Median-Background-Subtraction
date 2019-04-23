@@ -11,11 +11,6 @@ import nl.nkiavl.rharkes.TemporalMedian;
 
 public class TemporalMedianTestCase {
 	TemporalMedian TM = new TemporalMedian(); 
-	
-	@Test
-	public void testPow() {
-		assertEquals(128,TM.pow(2, 7));
-	}
 	@Test
 	public void testDenseRank() {
 		Img< UnsignedShortType > img = IO.openImgs( System.getProperty("user.dir")+"\\src\\test\\java\\testfile.tif", new ArrayImgFactory<>( new UnsignedShortType() ) ).get( 0 );
@@ -26,7 +21,7 @@ public class TemporalMedianTestCase {
 		assertArrayEquals(unrankArray,TM.denseRank(img,65535));
 	}
 	@Test
-	public void testSubstrmedian() {
+	public void testSubtractMedian() {
 		Img< UnsignedShortType > img = IO.openImgs( System.getProperty("user.dir")+"\\src\\test\\java\\testfile.tif", new ArrayImgFactory<>( new UnsignedShortType() ) ).get( 0 );
 		Img< UnsignedShortType > res = IO.openImgs( System.getProperty("user.dir")+"\\src\\test\\java\\resultfile.tif", new ArrayImgFactory<>( new UnsignedShortType() ) ).get( 0 );
 		
@@ -35,7 +30,7 @@ public class TemporalMedianTestCase {
 		short offset = 100;
 		long[] dims = {20,20,1000};
 		for (int i = 0;i<400;i++) {
-			TM.substrmedian(img,i,dims,window,offset,unrankArray);
+			TM.subtractMedian(img,i,dims,window,offset,unrankArray);
 		}
 		
 		//check equality
