@@ -232,7 +232,7 @@ public class TemporalMedian implements Command, Previewable {
 				median = j;
 			} else {
 				pixel = randA2.get().getShort(); //Old pixel remove from the histogram
-				randA1.fwd(2);
+				randA2.fwd(2);
 				pixel2 = randA1.get().getShort(); //New pixel, add to the histogram
 				randA1.fwd(2);
 
