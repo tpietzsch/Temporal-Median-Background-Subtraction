@@ -83,7 +83,7 @@ public class TemporalMedian implements Command, Previewable {
 			window++;
 			log.warn("No support for even windows. Window = " + window);
 		}
-
+		
 		int unrankArray[] = denseRank(img,values);
 		//do calculation in parallel per pixel
 		final AtomicInteger ai = new AtomicInteger(0); //special unqique int for each thread
@@ -220,7 +220,7 @@ public class TemporalMedian implements Command, Previewable {
 				for (int t2 = 0; t2 < window; t2++) //For each frame inside the window
 				{
 					hist[randA1.get().getShort()]++; //Add it to the histogram
-					randA1.move(1, 2); //take a step in time
+					randA1.fwd(2); //take a step in time
 				}
 				short count = 0, j = -1;
 				while (count <= windowC) //Counting the histogram, until it reaches the median
@@ -232,9 +232,9 @@ public class TemporalMedian implements Command, Previewable {
 				median = j;
 			} else {
 				pixel = randA2.get().getShort(); //Old pixel remove from the histogram
-				randA2.move(1,2);
+				randA1.fwd(2);
 				pixel2 = randA1.get().getShort(); //New pixel, add to the histogram
-				randA1.move(1,2);
+				randA1.fwd(2);
 
 				hist[pixel]--; //Removing old pixel
 				hist[pixel2]++; //Adding new pixel
