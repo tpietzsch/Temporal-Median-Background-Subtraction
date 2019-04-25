@@ -1,8 +1,9 @@
 package nl.nkiavl.rharkes;
 
-import net.imglib2.Cursor;
 import net.imglib2.img.Img;
 import net.imglib2.type.numeric.integer.UnsignedShortType;
+import net.imglib2.util.Intervals;
+import net.imglib2.view.Views;
 
 import org.scijava.app.StatusService;
 import org.scijava.command.Command;
@@ -30,25 +31,17 @@ public class TestMemoryMovingNew implements Command, Previewable {
 
     @Override
     public void run() {
-        final long[] dims = new long[img.numDimensions()];
-		img.dimensions(dims);
-		int pixels = (int)(dims[0]*dims[1]*dims[2]);
-        //allocate data storage
-        short data[] = new short[pixels];
-        statusService.showStatus("loading data");
-        Cursor<UnsignedShortType> cursor = img.localizingCursor();
-        final long[] pos = new long[3];
-        int p = 0;
-        while (cursor.hasNext()) {
-        	cursor.fwd();
-        	cursor.localize(pos);
-        	data[(int) (pos[2]+pos[1]*dims[2]+pos[0]*dims[2]*dims[1])]=cursor.get().getShort();
-        	p++;
-        	if ((p%2000)==0){
-        		statusService.showProgress(p,pixels);
-        	}
-        }
-        statusService.showStatus(1, 1, "FINISHED");
+    	final int pixels = (int)Intervals.numElements(img);
+		final short data[] = new short[pixels];
+		statusService.showStatus("loading data");
+		int p = 0;
+		for (UnsignedShortType s : Views.flatIterable(img)) {
+			data[p++] = s.getShort();
+			if ((p % 2000) == 0) {
+				statusService.showProgress(p, pixels);
+			}
+		}
+		statusService.showStatus(1, 1, "FINISHED");
     }
 
     @Override
