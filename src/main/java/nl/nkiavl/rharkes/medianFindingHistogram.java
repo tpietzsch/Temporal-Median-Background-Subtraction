@@ -35,7 +35,7 @@ public class medianFindingHistogram {
 	
 	/**
 	 * @param data   Initial data for the histogram, must have odd nr of elements
-	 * @param nrBins Must be at least equal to the maximum any data that will be put into the histogram
+	 * @param nrBins Must be at least equal to the maximum of any data that will be put into the histogram
 	 */
 	public medianFindingHistogram(short[] data, short nrBins) {
 		hist = new short[nrBins];

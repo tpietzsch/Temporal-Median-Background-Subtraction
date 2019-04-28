@@ -209,111 +209,23 @@ public class TemporalMedian implements Command, Previewable {
 		randA2.setPosition(startposition);
 		int windowC = (window - 1) / 2; //0 indexed sorted array has median at this position.
 		int MedVals[] = new int[T-window+1]; //store unranked medians for subtraction after the loop
-		short pixel;
-		short pixel2;
-		short hist[] = new short[unrankArray.length]; //Gray-level histogram init at 0
-		short median = 0;//The median of this pixel
-		short aux = 0;   //Marks the position of the median pixel in the column of the histogram, starting with 1
-		for (int t = 0; t <= (T - window); t++) { //over all timepoints
-			if (t == 0) //Building the first histogram
-			{
-				for (int t2 = 0; t2 < window; t2++) //For each frame inside the window
-				{
-					hist[randA1.get().getShort()]++; //Add it to the histogram
-					randA1.fwd(2); //take a step in time
-				}
-				short count = 0, j = -1;
-				while (count <= windowC) //Counting the histogram, until it reaches the median
-				{
-					j++;
-					count += hist[j];
-				}
-				aux = (short) (count - (int) windowC); //position in the bin. 1 is lowest.
-				median = j;
-			} else {
-				pixel = randA2.get().getShort(); //Old pixel remove from the histogram
+		short[] data = new short[window];
+		short addValue;
+		short removeValue;
+		for (int t2 = 0; t2 < window; t2++) //For each frame inside the window
+		{
+			data[t2]=randA1.get().getShort(); //Add it to the intial dataset
+			randA1.fwd(2); //take a step in time
+		}
+		medianFindingHistogram medFindHist = new medianFindingHistogram(data,(short) unrankArray.length);
+		MedVals[0] = unrankArray[medFindHist.median];
+		for (int t = 1; t <= (T - window); t++) { //over all timepoints
+				removeValue = randA2.get().getShort(); //Old pixel remove from the histogram
 				randA2.fwd(2);
-				pixel2 = randA1.get().getShort(); //New pixel, add to the histogram
+				addValue = randA1.get().getShort(); //New pixel, add to the histogram
 				randA1.fwd(2);
-
-				hist[pixel]--; //Removing old pixel
-				hist[pixel2]++; //Adding new pixel
-				if (!(((pixel > median)
-						&& (pixel2 > median))
-						|| ((pixel < median)
-								&& (pixel2 < median))
-						|| ((pixel == median)
-								&& (pixel2 == median)))) //Add and remove the same pixel, or pixel from the same side, the median doesn't change
-				{
-					int j = median;
-					if ((pixel2 > median) && (pixel < median)) //The median goes right
-					{
-						if (hist[median] == aux) //The previous median was the last pixel of its column in the histogram, so it changes
-						{
-							j++;
-							while (hist[j] == 0) //Searching for the next pixel
-							{
-								j++;
-							}
-							median = (short) (j);
-							aux = 1; //The median is the first pixel of its column
-						} else {
-							aux++; //The previous median wasn't the last pixel of its column, so it doesn't change, just need to mark its new position
-						}
-					} else if ((pixel > median) && (pixel2 < median)) //The median goes left
-					{
-						if (aux == 1) //The previous median was the first pixel of its column in the histogram, so it changes
-						{
-							j--;
-							while (hist[j] == 0) //Searching for the next pixel
-							{
-								j--;
-							}
-							median = (short) (j);
-							aux = hist[j]; //The median is the last pixel of its column
-						} else {
-							aux--; //The previous median wasn't the first pixel of its column, so it doesn't change, just need to mark its new position
-						}
-					} else if (pixel2 == median) //new pixel = last median
-					{
-						if (pixel < median) //old pixel < last median, the median goes right
-						{
-							aux++; //There is at least one pixel above the last median (the one that was just added), so the median doesn't change, just need to mark its new position
-						}								//else, absolutely nothing changes
-					} else //pixel==median, old pixel = last median
-					{
-						if (pixel2 > median) //new pixel > last median, the median goes right
-						{
-							if (aux == (hist[median] + 1)) //The previous median was the last pixel of its column, so it changes
-							{
-								j++;
-								while (hist[j] == 0) //Searching for the next pixel
-								{
-									j++;
-								}
-								median = (short) (j);
-								aux = 1; //The median is the first pixel of its column
-							}
-							//else, absolutely nothing changes
-						} else //pixel2<median, new pixel < last median, the median goes left
-						{
-							if (aux == 1) //The previous median was the first pixel of its column in the histogram, so it changes
-							{
-								j--;
-								while (hist[j] == 0) //Searching for the next pixel
-								{
-									j--;
-								}
-								median = (short) (j);
-								aux = hist[j]; //The median is the last pixel of its column
-							} else {
-								aux--; //The previous median wasn't the first pixel of its column, so it doesn't change, just need to mark its new position
-							}
-						}
-					}
-				}
-			}
-			MedVals[t] = unrankArray[median];
+				medFindHist.addRemoveValues(addValue, removeValue);
+				MedVals[t] = unrankArray[medFindHist.median];
 		}
 		// now convert this pixel back from rank to original data and subtract the median
 		// this must be done AFTER median calculation. Otherwise we mix ranked and unranked data.
