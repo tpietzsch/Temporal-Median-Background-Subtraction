@@ -1,7 +1,9 @@
 package nl.nkiavl.rharkes;
 import static org.junit.Assert.*;
-import org.junit.Test;
 
+import java.util.Random;
+
+import org.junit.Test;
 import io.scif.img.IO;
 import net.imglib2.Cursor;
 import net.imglib2.img.Img;
@@ -20,6 +22,7 @@ public class TemporalMedianTestCase {
 		}
 		assertArrayEquals(unrankArray,TM.denseRank(img,65535));
 	}
+	
 	@Test
 	public void testSubtractMedian() {
 		Img< UnsignedShortType > img = IO.openImgs( System.getProperty("user.dir")+"\\src\\test\\java\\testfile.tif", new ArrayImgFactory<>( new UnsignedShortType() ) ).get( 0 );
