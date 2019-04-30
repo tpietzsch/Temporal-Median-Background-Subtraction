@@ -99,7 +99,8 @@ public class testMedianFindingHistogram {
 		}
 		short M2 = quickSelect.select(data2, data2.length/2);
 		assertEquals("quickSelect Fails",(short)3,M2);
-		medianFindingHistogram medFind = new medianFindingHistogram(data1,values);
+		medianFindingHistogram medFind = new medianFindingHistogram((short) values,(short)data1.length);
+		medFind.initializeHistogram(data1);
 		assertEquals("medianFindingHistogram med fails",(short)3,medFind.median);
 		
 		data2[0]=7; //remove a 0, add a 3
@@ -127,7 +128,8 @@ public class testMedianFindingHistogram {
 				data2[i] = data[i];
 			}
 			short M = quickSelect.select(data, data.length/2);
-			medianFindingHistogram medFind = new medianFindingHistogram(data2,(short) values);
+			medianFindingHistogram medFind = new medianFindingHistogram((short) values,(short)dataLength);
+			medFind.initializeHistogram(data2);
 			assertEquals(M,medFind.median);
 			//add and remove value and recalculate median
 			short rep = (short) generator.nextInt(dataLength);

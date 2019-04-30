@@ -15,6 +15,7 @@ public class subtractMedian implements Positionable {
 	private final short[] data;
 	private final int[] medianValues;
 	private final short[] datastart;
+	private final medianFindingHistogram medFindHist;
 	public subtractMedian(RandomAccess< UnsignedShortType > randA, int[] unrankArray,short window,short offset,long[] dims) {
 		this.unrankArray=unrankArray;
 		this.randA = randA;
@@ -25,6 +26,7 @@ public class subtractMedian implements Positionable {
 		this.data = new short[(int)dims[2]];
 		this.medianValues = new int[(int) dims[2]-window+1];
 		this.datastart = new short[window];
+		this.medFindHist = new medianFindingHistogram((short) unrankArray.length, window);
 	}
 	public void run() {
 		randA.setPosition(0,2);
@@ -35,7 +37,7 @@ public class subtractMedian implements Positionable {
 		for (int i=0;i<window;i++) {
 			datastart[i]=data[i];
 		}
-		medianFindingHistogram medFindHist = new medianFindingHistogram(datastart,(short) unrankArray.length);
+		medFindHist.initializeHistogram(datastart);
 		medianValues[0] = unrankArray[medFindHist.median];
 		for (int t = 0; t < (dims[2] - window); t++) { //over all timepoints
 				medFindHist.addRemoveValues(data[window+t], data[t]);
@@ -45,15 +47,14 @@ public class subtractMedian implements Positionable {
 		// this must be done AFTER median calculation. Otherwise we mix ranked and unranked data.
 
 		randA.setPosition(0,2);
-		UnsignedShortType currPix = randA.get();
 		for (int t = 0; t < dims[2]; t++) {
 			//take a step in time
 			if (t <= windowC) {            //Apply first median to frame 0->windowC
-				currPix.setShort((short) (offset + unrankArray[currPix.getShort()] - medianValues[0]));
+				randA.get().setShort((short) (offset + unrankArray[randA.get().getShort()] - medianValues[0]));
 			} else if (t<(dims[2] - windowC)) {  //Apply median from windowC back to the current frame 
-				currPix.setShort((short) (offset + unrankArray[currPix.getShort()] - medianValues[t-windowC]));
+				randA.get().setShort((short) (offset + unrankArray[randA.get().getShort()] - medianValues[t-windowC]));
 			} else {                       //Apply last median to frame (T-windowC)->T
-				currPix.setShort((short) (offset + unrankArray[currPix.getShort()] - medianValues[medianValues.length-1]));
+				randA.get().setShort((short) (offset + unrankArray[randA.get().getShort()] - medianValues[medianValues.length-1]));
 			}
 			randA.fwd(2);
 		}

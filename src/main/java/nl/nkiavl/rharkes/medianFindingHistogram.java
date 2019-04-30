@@ -37,9 +37,19 @@ public class medianFindingHistogram {
 	 * @param data   Initial data for the histogram, must have odd nr of elements
 	 * @param nrBins Must be at least equal to the maximum of any data that will be put into the histogram
 	 */
-	public medianFindingHistogram(short[] data, short nrBins) {
-		hist = new short[nrBins];
-		medianPosition = (short) (data.length/2); //
+	public medianFindingHistogram(short nrBins,short window) {
+		this.hist = new short[nrBins];
+		this.medianPosition = (short) (window/2); //
+		this.median = 0;
+		this.aux=0;
+	}
+	public medianFindingHistogram(short[] data,short nrBins) {
+		this.hist = new short[nrBins];
+		this.medianPosition = (short) (data.length/2);
+		this.initializeHistogram(data);
+	}
+	public void initializeHistogram(short[] data) {
+		for (int i = 0;i<hist.length;i++) {hist[i]=0;}
 		//Add data to histogram
 		for (int i = 0; i < data.length; i++) 
 		{
