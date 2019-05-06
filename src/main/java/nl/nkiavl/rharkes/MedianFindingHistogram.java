@@ -27,7 +27,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
  */
  
-public class medianFindingHistogram {
+public class MedianFindingHistogram {
 	public short median;
 	private final short[] hist;
 	private short aux; //position in the bin
@@ -37,13 +37,13 @@ public class medianFindingHistogram {
 	 * @param data   Initial data for the histogram, must have odd nr of elements
 	 * @param nrBins Must be at least equal to the maximum of any data that will be put into the histogram
 	 */
-	public medianFindingHistogram(short nrBins,short window) {
+	public MedianFindingHistogram(short nrBins,short window) {
 		this.hist = new short[nrBins];
 		this.medianPosition = (short) (window/2); //
 		this.median = 0;
 		this.aux=0;
 	}
-	public medianFindingHistogram(short[] data,short nrBins) {
+	public MedianFindingHistogram(short[] data,short nrBins) {
 		this.hist = new short[nrBins];
 		this.medianPosition = (short) (data.length/2);
 		this.initializeHistogram(data);

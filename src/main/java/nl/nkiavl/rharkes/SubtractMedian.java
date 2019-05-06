@@ -5,7 +5,7 @@ import net.imglib2.Positionable;
 import net.imglib2.RandomAccess;
 import net.imglib2.type.numeric.integer.UnsignedShortType;
 
-public class subtractMedian implements Positionable {
+public class SubtractMedian implements Positionable {
 	private final int[] unrankArray;
 	private final RandomAccess< UnsignedShortType > randA;
 	private final short window;
@@ -15,8 +15,8 @@ public class subtractMedian implements Positionable {
 	private final short[] data;
 	private final int[] medianValues;
 	private final short[] datastart;
-	private final medianFindingHistogram medFindHist;
-	public subtractMedian(RandomAccess< UnsignedShortType > randA, int[] unrankArray,short window,short offset,long[] dims) {
+	private final MedianFindingHistogram medFindHist;
+	public SubtractMedian(RandomAccess< UnsignedShortType > randA, int[] unrankArray,short window,short offset,long[] dims) {
 		this.unrankArray=unrankArray;
 		this.randA = randA;
 		this.window = window;
@@ -26,7 +26,7 @@ public class subtractMedian implements Positionable {
 		this.data = new short[(int)dims[2]];
 		this.medianValues = new int[(int) dims[2]-window+1];
 		this.datastart = new short[window];
-		this.medFindHist = new medianFindingHistogram((short) unrankArray.length, window);
+		this.medFindHist = new MedianFindingHistogram((short) unrankArray.length, window);
 	}
 	public void run() {
 		randA.setPosition(0,2);

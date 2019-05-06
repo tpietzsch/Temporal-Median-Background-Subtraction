@@ -30,7 +30,7 @@ public class TemporalMedianTestCase {
 		short window = 101;
 		short offset = 100;
 		long[] dims = {20,20,1000};
-		subtractMedian subMed = new subtractMedian(img.randomAccess(),unrankArray,window,offset,dims);
+		SubtractMedian subMed = new SubtractMedian(img.randomAccess(),unrankArray,window,offset,dims);
 		for (long x = 0; x < dims[0]; x++) {
 			for (long y = 0; y<dims[1];y++) {
 				subMed.setPosition(x, 0);

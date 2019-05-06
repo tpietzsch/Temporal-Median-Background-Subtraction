@@ -26,6 +26,8 @@ SOFTWARE.
  */
 import static java.lang.System.arraycopy;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 import net.imglib2.Cursor;
 import net.imglib2.img.Img;
 import net.imglib2.type.numeric.integer.UnsignedShortType;
@@ -79,22 +81,49 @@ public class TemporalMedian implements Command{
 		
 		int unrankArray[] = denseRank(img);
 		
-		//do calculation per pixel
-		subtractMedian subMed = new subtractMedian(img.randomAccess(),unrankArray,window,offset,dims);
-		for (long x = 0; x < dims[0]; x++) {
-			for (long y = 0; y<dims[1];y++) {
-				subMed.setPosition(x, 0);
-				subMed.setPosition(y, 1);
-				subMed.run();
-			}
-			statusService.showStatus("Row ("+x+"/" +dims[0]+")");
-			statusService.showProgress((int)x, (int)dims[0]);
+		final AtomicInteger ai = new AtomicInteger(0); //special unique int for each thread
+		final Thread[] threads = newThreadArray(); //all threads
+		for (int ithread = 0; ithread < threads.length; ithread++) {
+			threads[ithread] = new Thread() { //make threads
+				{
+					setPriority(Thread.NORM_PRIORITY);
+				}
+				public void run() {
+					SubtractMedian subMed = new SubtractMedian(img.randomAccess(),unrankArray,window,offset,dims);
+					for (int y = ai.getAndIncrement(); y < dims[1]; y = ai.getAndIncrement()) { //get unique column
+						subMed.setPosition(y, 1);
+						for (long x = 0; x<dims[0];x++) {
+							subMed.setPosition(x, 0);
+							subMed.run();
+						}
+						statusService.showStatus("Row ("+y+"/" +dims[0]+")");
+						statusService.showProgress(y, (int)dims[0]);
+					}
+				}
+			}; //end of thread creation
 		}
+		startAndJoin(threads);
 		//check for zeros to warn for underflow
 		statusService.showStatus(1, 1, "FINISHED");
 		//refresh imagej
 	}
-
+	private Thread[] newThreadArray() {
+		int n_cpus = Runtime.getRuntime().availableProcessors();
+		return new Thread[n_cpus];
+	}
+	public static void startAndJoin(Thread[] threads) {
+		for (int ithread = 0; ithread < threads.length; ++ithread) {
+			threads[ithread].setPriority(Thread.NORM_PRIORITY);
+			threads[ithread].start();
+		}
+		try {
+			for (int ithread = 0; ithread < threads.length; ++ithread) {
+				threads[ithread].join();
+			}
+		} catch (InterruptedException ie) {
+			throw new RuntimeException(ie);
+		}
+	}
 
 	/**
 	 * Dense ranking of the input image. 

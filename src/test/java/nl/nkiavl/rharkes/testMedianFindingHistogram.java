@@ -20,7 +20,7 @@ public class testMedianFindingHistogram {
 		}
 		short M2 = quickSelect.select(data2, data2.length/2);
 		assertEquals("quickSelect Fails",(short)11,M2);
-		medianFindingHistogram medFind = new medianFindingHistogram(data1,values);
+		MedianFindingHistogram medFind = new MedianFindingHistogram(data1,values);
 
 		assertEquals("medianFindingHistogram Fails",(short)11,medFind.median);
 		
@@ -47,7 +47,7 @@ public class testMedianFindingHistogram {
 		}
 		short M2 = quickSelect.select(data2, data2.length/2);
 		assertEquals("quickSelect Fails",(short)5,M2);
-		medianFindingHistogram medFind = new medianFindingHistogram(data1,values);
+		MedianFindingHistogram medFind = new MedianFindingHistogram(data1,values);
 		assertEquals("medianFindingHistogram Fails",(short)5,medFind.median);
 		
 		data2[22]=0; //remove a 11, add a 0
@@ -73,7 +73,7 @@ public class testMedianFindingHistogram {
 		}
 		short M2 = quickSelect.select(data2, data2.length/2);
 		assertEquals("quickSelect Fails",(short)3,M2);
-		medianFindingHistogram medFind = new medianFindingHistogram(data1,values);
+		MedianFindingHistogram medFind = new MedianFindingHistogram(data1,values);
 		assertEquals("medianFindingHistogram Fails",(short)3,medFind.median);
 		
 		data2[22]=0; //remove a 7, add a 0
@@ -99,7 +99,7 @@ public class testMedianFindingHistogram {
 		}
 		short M2 = quickSelect.select(data2, data2.length/2);
 		assertEquals("quickSelect Fails",(short)3,M2);
-		medianFindingHistogram medFind = new medianFindingHistogram((short) values,(short)data1.length);
+		MedianFindingHistogram medFind = new MedianFindingHistogram((short) values,(short)data1.length);
 		medFind.initializeHistogram(data1);
 		assertEquals("medianFindingHistogram med fails",(short)3,medFind.median);
 		
@@ -128,7 +128,7 @@ public class testMedianFindingHistogram {
 				data2[i] = data[i];
 			}
 			short M = quickSelect.select(data, data.length/2);
-			medianFindingHistogram medFind = new medianFindingHistogram((short) values,(short)dataLength);
+			MedianFindingHistogram medFind = new MedianFindingHistogram((short) values,(short)dataLength);
 			medFind.initializeHistogram(data2);
 			assertEquals(M,medFind.median);
 			//add and remove value and recalculate median
@@ -155,7 +155,7 @@ public class testMedianFindingHistogram {
 				data2[i] = data[i];
 			}
 			short M = quickSelect.select(data, data.length/2);
-			medianFindingHistogram medFind = new medianFindingHistogram(data2,(short) values);
+			MedianFindingHistogram medFind = new MedianFindingHistogram(data2,(short) values);
 			assertEquals(M,medFind.median);
 		for (int repeats = 0;repeats<1000;repeats++) {
 			//add and remove value and recalculate median
@@ -202,7 +202,7 @@ public class testMedianFindingHistogram {
 		for (int j = 0;j<window;j++) {
 			dataWindow2[j]=data2[j];
 		}
-		medianFindingHistogram medFind = new medianFindingHistogram(dataWindow2,(short) values);
+		MedianFindingHistogram medFind = new MedianFindingHistogram(dataWindow2,(short) values);
 		medians2[0]=medFind.median;
 		for (int i=1;i<medians2.length;i++) {
 			medFind.addRemoveValues(data2[i+window-1], data2[i-1]);
