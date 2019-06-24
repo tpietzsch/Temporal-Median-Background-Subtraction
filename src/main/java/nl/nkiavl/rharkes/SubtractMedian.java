@@ -6,7 +6,7 @@ import net.imglib2.RandomAccess;
 import net.imglib2.type.numeric.integer.UnsignedShortType;
 
 public class SubtractMedian implements Positionable {
-	private final int[] unrankArray;
+	private final short[] unrankArray;
 	private final RandomAccess< UnsignedShortType > randA;
 	private final short window;
 	private final short windowC;
@@ -16,7 +16,7 @@ public class SubtractMedian implements Positionable {
 	private final int[] medianValues;
 	private final short[] datastart;
 	private final MedianFindingHistogram medFindHist;
-	public SubtractMedian(RandomAccess< UnsignedShortType > randA, int[] unrankArray,short window,short offset,long[] dims) {
+	public SubtractMedian(RandomAccess< UnsignedShortType > randA, short[] unrankArray,short window,short offset,long[] dims) {
 		this.unrankArray=unrankArray;
 		this.randA = randA;
 		this.window = window;
@@ -45,7 +45,7 @@ public class SubtractMedian implements Positionable {
 		}
 		// now convert this pixel back from rank to original data and subtract the median
 		// this must be done AFTER median calculation. Otherwise we mix ranked and unranked data.
-
+		
 		randA.setPosition(0,2);
 		for (int t = 0; t < dims[2]; t++) {
 			//take a step in time

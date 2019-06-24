@@ -28,8 +28,11 @@ import static java.lang.System.arraycopy;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
+import net.imagej.Dataset;
+import net.imagej.ImgPlus;
 import net.imglib2.Cursor;
 import net.imglib2.img.Img;
+import net.imglib2.type.numeric.RealType;
 import net.imglib2.type.numeric.integer.UnsignedShortType;
 
 import org.scijava.app.StatusService;
@@ -37,9 +40,11 @@ import org.scijava.command.Command;
 import org.scijava.log.LogService;
 import org.scijava.plugin.Parameter;
 import org.scijava.plugin.Plugin;
+import org.scijava.ui.UIService;
 
 /**
  * Subtracts the temporal median
+ * @param <T>
  */
 @Plugin(type = Command.class, headless = true,
 menuPath = "Plugins>Process>Temporal Median Background Subtraction")
@@ -50,10 +55,12 @@ public class TemporalMedian implements Command{
 
 	@Parameter
 	private StatusService statusService;
-
-	@Parameter(label = "Select image", description = "the image field")
-	private Img<UnsignedShortType> img;
-	int values;
+	
+	@Parameter
+	private UIService uiService;
+	
+	@Parameter
+	private Dataset currentData;
 
 	@Parameter(label = "Median window", description = "the frames for medan")
 	private short window;
@@ -67,6 +74,14 @@ public class TemporalMedian implements Command{
 
 	@Override
 	public void run() {
+		RealType<?> tempPixel = currentData.firstElement();
+		if (tempPixel.getBitsPerPixel()!=16) {
+			log.error("bits per pixel not equal to 16");
+			return;
+		}
+		int values = 1 << tempPixel.getBitsPerPixel(); //65536
+		@SuppressWarnings("unchecked")
+		ImgPlus<UnsignedShortType> img = (ImgPlus<UnsignedShortType>) currentData.getImgPlus();		
 		final long[] dims = new long[img.numDimensions()];
 		img.dimensions(dims);
 		//sanity check on the input
@@ -79,7 +94,7 @@ public class TemporalMedian implements Command{
 			log.warn("No support for even windows. Window = " + window);
 		}
 		
-		int unrankArray[] = denseRank(img);
+		short[] unrankArray = denseRank(img,values);
 		
 		final AtomicInteger ai = new AtomicInteger(0); //special unique int for each thread
 		final Thread[] threads = newThreadArray(); //all threads
@@ -96,8 +111,8 @@ public class TemporalMedian implements Command{
 							subMed.setPosition(x, 0);
 							subMed.run();
 						}
-						statusService.showStatus("Row ("+y+"/" +dims[0]+")");
-						statusService.showProgress(y, (int)dims[0]);
+						statusService.showStatus("Row ("+y+"/" +dims[1]+")");
+						statusService.showProgress(y, (int)dims[1]);
 					}
 				}
 			}; //end of thread creation
@@ -105,7 +120,8 @@ public class TemporalMedian implements Command{
 		startAndJoin(threads);
 		//check for zeros to warn for underflow
 		statusService.showStatus(1, 1, "FINISHED");
-		//refresh imagej
+		//refresh ImageJ UI to show new image
+		uiService.showUI();
 	}
 	private Thread[] newThreadArray() {
 		int n_cpus = Runtime.getRuntime().availableProcessors();
@@ -124,54 +140,52 @@ public class TemporalMedian implements Command{
 			throw new RuntimeException(ie);
 		}
 	}
-
 	/**
 	 * Dense ranking of the input image. 
 	 * It returns a decompression array to go from rank to value that has the 
 	 * length of the total number of unique values.
 	 * Example: [0 5 6 5 10 6] becomes [0 1 2 1 3 2]
-	 *          The decompression array is [0 5 6 10] 
+	 *          The unranking array is [0 5 6 10] 
 	 * @param img input image
 	 * @param values maximum possible values
 	 * @return integer array to convert the ranked image back
 	 * @see <a href = "https://en.wikipedia.org/wiki/Ranking#Dense_ranking_(%221223%22_ranking)">Dense ranking</a>
 	 * */ 
-	public int[] denseRank(Img< UnsignedShortType > img) {
-		UnsignedShortType temp = img.firstElement();
-    	values = 1 << temp.getBitsPerPixel();
+	public short[] denseRank(Img< UnsignedShortType > img,int values) {
 		boolean[] doesValueExist = new boolean[values];
 		Cursor<UnsignedShortType> cursor = img.cursor();
 		//go over all pixels to see what values exist
 		if (statusService != null) {statusService.showStatus("ranking image (1/3)...");}
 		while (cursor.hasNext()) {
-			doesValueExist[cursor.next().getInteger()]=true;
+			doesValueExist[cursor.next().getShort()]=true;
 		}
 		//create the unrank array and subtract array. 
-		int subtract[] = new int[values];
-		int unrankArrayFull[] = new int[values]; //unrank array unrankArray[data] --> original data (int, since short cannot handle >2^15)
-		int idx = 0;
-		int subtractvalue = 0;
+		short subtract[] = new short[values];
+		short unrankArrayFull[] = new short[values]; //unrank array unrankArray[data] --> original data (int, since short cannot handle >2^15)
+		short idx = 0;
+		short subtractvalue = 0;
 		if (statusService != null) {statusService.showStatus("ranking image (2/3)...");}
 		for (int i = 0; i < values; i++) {
 			if (doesValueExist[i]) {
 				subtract[i] = subtractvalue;
-				unrankArrayFull[idx] = subtractvalue + idx;
+				unrankArrayFull[idx] = (short) (subtractvalue + idx);
 				idx++;
 			} else {
 				subtractvalue++;
 			}
 		}
 		//trim the unranking array
-		int unrankArray[] = new int[idx];
+		short unrankArray[] = new short[idx];
 		arraycopy(unrankArrayFull, 0, unrankArray, 0, idx);
 		//rank data
 		if (statusService != null) {statusService.showStatus("ranking image (3/3)...");}
 		cursor.reset();
 		while (cursor.hasNext()) {
 			UnsignedShortType t = cursor.next();
-			t.setInteger(t.getInteger()-subtract[t.getInteger()]);
+			t.setShort((short) (t.getShort()-subtract[t.getShort()]));
 		}
-		if (statusService != null) {statusService.showStatus("Finished!");}
+		if (statusService != null) {statusService.showStatus("ranking complete");}
 		return unrankArray;
 	}
+	
 }

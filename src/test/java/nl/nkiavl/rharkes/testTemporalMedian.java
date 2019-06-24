@@ -14,11 +14,11 @@ public class testTemporalMedian {
 	@Test
 	public void testDenseRank() {
 		Img< UnsignedShortType > img = IO.openImgs( System.getProperty("user.dir")+"\\src\\test\\java\\testfile.tif", new ArrayImgFactory<>( new UnsignedShortType() ) ).get( 0 );
-		int[] unrankArray = new int[1000];
+		short[] unrankArray = new short[1000];
 		for (int i=0;i<1000;i++) {
-			unrankArray[i] = i+1;
+			unrankArray[i] = (short) (i+1);
 		}
-		assertArrayEquals(unrankArray,TM.denseRank(img));
+		assertArrayEquals(unrankArray,TM.denseRank(img,65535));
 	}
 	
 	@Test
@@ -26,7 +26,7 @@ public class testTemporalMedian {
 		Img< UnsignedShortType > img = IO.openImgs( System.getProperty("user.dir")+"\\src\\test\\java\\testfile.tif", new ArrayImgFactory<>( new UnsignedShortType() ) ).get( 0 );
 		Img< UnsignedShortType > res = IO.openImgs( System.getProperty("user.dir")+"\\src\\test\\java\\resultfile.tif", new ArrayImgFactory<>( new UnsignedShortType() ) ).get( 0 );
 		long start = System.currentTimeMillis();
-		int[] unrankArray = TM.denseRank(img);
+		short[] unrankArray = TM.denseRank(img,65535);
 		short window = 101;
 		short offset = 100;
 		long[] dims = {20,20,1000};
