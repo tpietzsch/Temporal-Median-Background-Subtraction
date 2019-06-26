@@ -85,10 +85,14 @@
         </repository>
     </repositories>
 
-    <dependencies>        
+    <dependencies>
         <dependency>
             <groupId>net.imagej</groupId>
             <artifactId>imagej</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>net.imagej</groupId>
+            <artifactId>imagej-legacy</artifactId>
         </dependency>
     </dependencies>
 </project>

@@ -1,15 +1,15 @@
-/* Fast Temporal Median filter 
-In 2017 Rolf Harkes and Bram van den Broek, Netherlands Cancer Institute, 
+/* Fast Temporal Median filter
+In 2017 Rolf Harkes and Bram van den Broek, Netherlands Cancer Institute,
 implemented the T.S.Huang algorithm in a maven .jar for easy deployment in Fiji (ImageJ2)
-The data is read to a single array and each pixel is processed in parallel. 
+The data is read to a single array and each pixel is processed in parallel.
 The filter is intended for pre-processing of single molecule localization data.
 
 Used articles:
 T.S.Huang et al. 1979 - Original algorithm for median calculation
 
-This software is released under the GPL v3. You may copy, distribute and modify 
-the software as long as you track changes/dates in source files. Any 
-modifications to or software including (via compiler) GPL-licensed code 
+This software is released under the GPL v3. You may copy, distribute and modify
+the software as long as you track changes/dates in source files. Any
+modifications to or software including (via compiler) GPL-licensed code
 must also be made available under the GPL along with build & install instructions.
 https://www.gnu.org/licenses/gpl-3.0.en.html
 
@@ -29,6 +29,7 @@ import ij.process.ImageConverter;
 import ij.process.StackConverter;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import net.imagej.ImageJ;
 import org.scijava.app.StatusService;
 import org.scijava.command.Command;
 import org.scijava.command.Previewable;
@@ -61,7 +62,24 @@ public class TemporalMedian implements Command, Previewable {
     //@Parameter(label = "Ignore this", description = "Do not use this field", visibility = ItemVisibility.INVISIBLE)
     //private ImagePlus IGNOREimage; //never used, need for getting a list selection for image1
     public static void main(final String... args) throws Exception {
+        final ImageJ ij = new ImageJ();
+        ij.ui().showUI();
 
+        final TemporalMedian command = new TemporalMedian();
+        command.log = ij.log();
+        command.statusService = ij.status();
+
+        final ImagePlus imp = IJ.openImage("/Users/pietzsch/Desktop/random.tif");
+        command.image1 = imp;
+        command.window = 501;
+        command.offset = 3000;
+
+        System.out.println("starting ... ");
+        final long t0 = System.currentTimeMillis();
+        command.run();
+        final long t1 = System.currentTimeMillis();
+        System.out.println("(t1-t0) = " + (t1 - t0));
+        System.out.println("done");
     }
 
     @Override
@@ -93,7 +111,7 @@ public class TemporalMedian implements Command, Previewable {
             window++;
             log.warn("No support for even windows. Window = " + window);
         }
-        
+
         //allocate data storage
         log.debug("allocating datastorage");
         short data[] = new short[t * pixels];
@@ -105,7 +123,7 @@ public class TemporalMedian implements Command, Previewable {
         Object[] imagearray = stack1.getImageArray();
         for (int i = 0; i < t; i++) { //all timepoints
             statusService.showProgress(i, t);
-            temp = (short[]) imagearray[i]; 
+            temp = (short[]) imagearray[i];
             for (int p = 0; p < pixels; p++) {//all pixels
                 data[i + p * t] = temp[p];
                 inihist[temp[p]] = true;
@@ -143,11 +161,16 @@ public class TemporalMedian implements Command, Previewable {
             statusService.showProgress(i, t);
             for (int p = 0; p < pixels; p++) { //all pixels
                 temp[p] = data[i + p * t];
-                if (temp[p]<0){zeros++;temp[p]=0;}
+                if (temp[p] < 0) {
+                    zeros++;
+                    temp[p] = 0;
+                }
             }
-            stack1.setPixels(temp.clone(), (i+1));
+            stack1.setPixels(temp.clone(), (i + 1));
         }
-        if (zeros>0&&(zeros/t)<10){log.info(zeros + " pixels went below zero. Concider increasing the offset." + (zeros/t) + " pixels per frame.");}
+        if (zeros > 0 && (zeros / t) < 10) {
+            log.info(zeros + " pixels went below zero. Concider increasing the offset." + (zeros / t) + " pixels per frame.");
+        }
         if ((zeros/t)>=10){log.warn(zeros + " pixels went below zero. Concider increasing the offset." + (zeros/t) + " pixels per frame.");}
         image1.setStack(stack1);
         image1.setTitle("MEDFILT_" + image1.getTitle());
@@ -330,7 +353,7 @@ public class TemporalMedian implements Command, Previewable {
         for (int t = 0; t < T; t++) {
             if (t <= windowC) {            //Apply first median to frame 0->windowC
                 data[t+step] = (short) (offset+addindex[data[t+step]] - tempres[0]);
-            } else if (t<(T - windowC)) {  //Apply median from windowC back to the current frame 
+            } else if (t<(T - windowC)) {  //Apply median from windowC back to the current frame
                 data[t+step] = (short) (offset+addindex[data[t+step]] - tempres[t-windowC]);
             } else {                      //Apply last median to frame (T-windowC)->T
                 data[t+step] = (short) (offset+addindex[data[t+step]] - tempres[tempres.length-1]);
