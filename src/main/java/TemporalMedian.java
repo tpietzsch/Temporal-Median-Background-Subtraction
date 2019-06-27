@@ -69,7 +69,7 @@ public class TemporalMedian implements Command, Previewable {
         command.log = ij.log();
         command.statusService = ij.status();
 
-        final ImagePlus imp = IJ.openImage("/Users/pietzsch/Desktop/random.tif");
+        final ImagePlus imp = IJ.openImage("/Users/pietzsch/Desktop/random-small.tif");
         command.image1 = imp;
         command.window = 501;
         command.offset = 3000;
