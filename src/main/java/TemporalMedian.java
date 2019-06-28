@@ -265,7 +265,8 @@ public class TemporalMedian implements Command, Previewable {
                     j++;
                     count += hist[j];
                 }
-                aux = (short) (count - (int) windowC); //position in the bin. 1 is lowest.
+                aux = (short) (windowC + hist[j] + 1 - count); //position in the bin. 1 is lowest.
+//                aux = (short) (count - (int) windowC); //position in the bin. 1 is lowest.
                 median = j;
             } else {
                 pixel = data[t + step - 1]; //Old pixel remove from the histogram
