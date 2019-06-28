@@ -99,7 +99,6 @@ public class Playground {
 
         final RankMap rankmap = RankMap.build(img);
         final RandomAccessibleInterval<UnsignedShortType> ranked = Converters.convert((RandomAccessibleInterval) img, rankmap::toRanked, new UnsignedShortType());
-        ImageJFunctions.show(ranked, "ranked");
 
         final int window = 501;
         final int offset = 3000;
@@ -120,7 +119,7 @@ public class Playground {
                 public void run() {
                     RandomAccess<UnsignedShortType> front = ranked.randomAccess();
                     RandomAccess<UnsignedShortType> back = img.randomAccess();
-                    MedianHistogram filter = new MedianHistogram(window, rankmap.getMaxRank());
+                    MedianHistogram median = new MedianHistogram(window, rankmap.getMaxRank());
                     for (int j = ai.getAndIncrement(); j < pixels; j = ai.getAndIncrement()) { //get unique i
                         final int[] pos = { j % imgw, j / imgw, 0 };
                         front.setPosition(pos);
@@ -128,30 +127,30 @@ public class Playground {
 
                         // read the first window ranked pixels into median filter
                         for (int i = 0; i < window; ++i) {
-                            filter.add((short) front.get().get());
+                            median.add((short) front.get().get());
                             front.fwd(2);
                         }
                         // write current median for windowC+1 pixels
                         for (int i = 0; i <= windowC; ++i) {
                             final UnsignedShortType t = back.get();
-                            t.set(t.get() + offset - rankmap.fromRanked(filter.get()));
+                            t.set(t.get() + offset - rankmap.fromRanked(median.get()));
                             back.fwd(2);
                         }
 
                         final int zSize = (int)img.dimension(2);
                         final int zSteps = zSize - window;
                         for (int i = 0; i < zSteps; ++i) {
-                            filter.add((short) front.get().get());
+                            median.add((short) front.get().get());
                             front.fwd(2);
                             final UnsignedShortType t = back.get();
-                            t.set(t.get() + offset - rankmap.fromRanked(filter.get()));
+                            t.set(t.get() + offset - rankmap.fromRanked(median.get()));
                             back.fwd(2);
                         }
 
                         // write current median for windowC pixels
                         for (int i = 0; i < windowC; ++i) {
                             final UnsignedShortType t = back.get();
-                            t.set(t.get() + offset - rankmap.fromRanked(filter.get()));
+                            t.set(t.get() + offset - rankmap.fromRanked(median.get()));
                             back.fwd(2);
                         }
                     }
